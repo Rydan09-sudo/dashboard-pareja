@@ -80,6 +80,15 @@
             <span>+</span> Registrar Movimiento
           </button>
         </div>
+
+        <!-- Recent Movements List -->
+        <div style="margin-top: 1.5rem;">
+          <h4 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.75rem;">Últimos Movimientos</h4>
+          <div id="transactions-list"
+            style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 180px; overflow-y: auto;">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
       </section>
 
       <!-- Interactive Expenses Chart -->
@@ -155,6 +164,83 @@
     <footer>
       <p>Shared Life Hub &copy; 2026 — Proyecto de Portafolio Web PWA</p>
     </footer>
+
+    <!-- Transaction Modal Backdrop -->
+    <div id="modal-backdrop" class="modal-backdrop">
+      <div class="modal-content glass-card">
+        <div class="card-header">
+          <h3 class="card-title">💵 Registrar Movimiento</h3>
+          <button class="close-btn" onclick="closeTransactionModal()">&times;</button>
+        </div>
+
+        <form id="transaction-form" onsubmit="handleSaveTransaction(event)">
+
+          <!-- Type Selection -->
+          <div class="form-group">
+            <label>Tipo de Movimiento</label>
+            <div class="radio-toggle">
+              <input type="radio" id="type-expense" name="type" value="expense" checked onchange="toggleSplitOptions()">
+              <label for="type-expense" class="radio-label">🔴 Gasto</label>
+
+              <input type="radio" id="type-income" name="type" value="income" onchange="toggleSplitOptions()">
+              <label for="type-income" class="radio-label">🟢 Ingreso</label>
+            </div>
+          </div>
+
+          <!-- Description -->
+          <div class="form-group">
+            <label for="tx-description">Descripción / Concepto</label>
+            <input type="text" id="tx-description" class="form-input"
+              placeholder="Ej. Cena en restaurante, Sueldo, Mercado..." required>
+          </div>
+
+          <!-- Amount & Category -->
+          <div class="form-row">
+            <div class="form-group">
+              <label for="tx-amount">Monto ($)</label>
+              <input type="number" id="tx-amount" class="form-input" placeholder="0.00" step="0.01" min="0.01" required>
+            </div>
+
+            <div class="form-group">
+              <label for="tx-category">Categoría</label>
+              <select id="tx-category" class="form-input">
+                <option value="Hogar & Servicios">🏠 Hogar & Servicios</option>
+                <option value="Mercado">🛒 Mercado</option>
+                <option value="Entretenimiento">🍿 Entretenimiento</option>
+                <option value="Ahorros">💰 Ahorros</option>
+                <option value="Otros">📦 Otros</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Scope: Personal vs Couple -->
+          <div class="form-group">
+            <label>Ámbito de la Cuenta</label>
+            <select id="tx-scope" class="form-input" onchange="toggleSplitOptions()">
+              <option value="couple">💖 Compartido (Pareja)</option>
+              <option value="personal">🔒 Personal (Privado)</option>
+            </select>
+          </div>
+
+          <!-- Split Proportion (Only for Couple Expenses) -->
+          <div id="split-group" class="form-group">
+            <label>División Proporcional del Gasto</label>
+            <select id="tx-split" class="form-input">
+              <option value="50-50">⚖️ 50% / 50% (Partes Iguales)</option>
+              <option value="60-40">📊 60% Tú / 40% Pareja</option>
+              <option value="70-30">📊 70% Tú / 30% Pareja</option>
+              <option value="100-0">👤 100% Tú</option>
+            </select>
+          </div>
+
+          <!-- Form Actions -->
+          <div style="display: flex; gap: 0.75rem; margin-top: 1.5rem; justify-content: flex-end;">
+            <button type="button" class="btn-secondary" onclick="closeTransactionModal()">Cancelar</button>
+            <button type="submit" class="btn-primary">Guardar Transacción</button>
+          </div>
+        </form>
+      </div>
+    </div>
 
   </div>
 
