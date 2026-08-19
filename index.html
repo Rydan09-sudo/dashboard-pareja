@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Our Life - Dashboard Personal & Pareja</title>
+
+  <!-- PWA Metadata -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="description"
+    content="Dashboard de gestión financiera, hábitos y tareas compartidas para parejas y personal.">
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+
+  <div class="app-container">
+
+    <!-- Top Navigation Bar -->
+    <nav class="navbar">
+      <div class="logo-group">
+        <div class="logo-icon">💑</div>
+        <div class="logo-text">
+          <h1>Our Life</h1>
+          <span>Gestión Personal & En Pareja</span>
+        </div>
+      </div>
+
+      <!-- Scope Switcher (Personal vs Compartido) -->
+      <div class="view-selector">
+        <button class="view-btn active" id="btn-view-all" onclick="switchView('all')">🌐 Todo</button>
+        <button class="view-btn" id="btn-view-personal" onclick="switchView('personal')">🔒 Personal</button>
+        <button class="view-btn" id="btn-view-couple" onclick="switchView('couple')">💖 Pareja</button>
+      </div>
+
+      <!-- Couple Sync Badge -->
+      <div class="user-status-bar">
+        <div class="couple-badge">
+          <div class="status-dot"></div>
+          <span id="partner-status">Sincronizado con Pareja</span>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Dashboard Grid -->
+    <main class="dashboard-grid">
+
+      <!-- Financial Balance Card -->
+      <section class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">💵 Resumen Financiero</h2>
+          <span class="card-badge" id="financial-scope-badge">Cuentas Compartidas & Personales</span>
+        </div>
+
+        <div class="balance-display">
+          <span style="color: var(--text-muted); font-size: 0.9rem;">Balance Total Disponible</span>
+          <div class="balance-amount" id="total-balance">$4,250.00</div>
+        </div>
+
+        <div class="balance-split">
+          <div class="split-item income">
+            <span>Ingresos del Mes</span>
+            <strong id="total-income">+$5,800.00</strong>
+          </div>
+          <div class="split-item expense">
+            <span>Gastos del Mes</span>
+            <strong id="total-expenses">-$1,550.00</strong>
+          </div>
+        </div>
+
+        <div style="margin-top: 1.25rem; display: flex; gap: 0.5rem;">
+          <button class="btn-primary" style="width: 100%; justify-content: center;" onclick="openTransactionModal()">
+            <span>+</span> Registrar Movimiento
+          </button>
+        </div>
+      </section>
+
+      <!-- Interactive Expenses Chart -->
+      <section class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">📊 Gastos por Categoría</h2>
+          <span class="card-badge">Este Mes</span>
+        </div>
+        <div style="height: 200px; position: relative;">
+          <canvas id="expensesChart"></canvas>
+        </div>
+      </section>
+
+      <!-- Habit Tracker Module -->
+      <section class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">⚡ Tracker de Hábitos</h2>
+          <button class="btn-primary" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" onclick="addHabitPrompt()">+
+            Nuevo</button>
+        </div>
+
+        <div id="habits-list">
+          <!-- Habit Item 1 (Pareja) -->
+          <div class="habit-item">
+            <div class="habit-info">
+              <h4>🏋️‍♂️ Ejercicio en pareja (30 min)</h4>
+              <div class="habit-streak">🔥 5 días seguidos • 💖 Compartido</div>
+            </div>
+            <button class="habit-check-btn completed" onclick="toggleHabit(this)">✓</button>
+          </div>
+
+          <!-- Habit Item 2 (Personal) -->
+          <div class="habit-item">
+            <div class="habit-info">
+              <h4>📚 Leer 20 páginas</h4>
+              <div class="habit-streak">🔥 12 días seguidos • 🔒 Personal</div>
+            </div>
+            <button class="habit-check-btn" onclick="toggleHabit(this)"></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Shared & Personal Tasks -->
+      <section class="glass-card">
+        <div class="card-header">
+          <h2 class="card-title">📋 Tareas y Pendientes</h2>
+          <button class="btn-primary" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" onclick="addTaskPrompt()">+
+            Agregar</button>
+        </div>
+
+        <div id="tasks-list">
+          <div class="task-item couple-task">
+            <div>
+              <strong style="font-size: 0.95rem;">🛒 Compras del mercado para la semana</strong>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Asignado a: Ambos • 💖 Pareja</div>
+            </div>
+            <input type="checkbox" style="width: 18px; height: 18px; cursor: pointer;">
+          </div>
+
+          <div class="task-item">
+            <div>
+              <strong style="font-size: 0.95rem;">💻 Subir proyecto a GitHub</strong>
+              <div style="font-size: 0.75rem; color: var(--text-muted);">Asignado a: Mí • 🔒 Personal</div>
+            </div>
+            <input type="checkbox" style="width: 18px; height: 18px; cursor: pointer;">
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer>
+      <p>Shared Life Hub &copy; 2026 — Proyecto de Portafolio Web PWA</p>
+    </footer>
+
+  </div>
+
+  <!-- Main JavaScript File -->
+  <script src="app.js"></script>
+
+</body>
+
+</html>

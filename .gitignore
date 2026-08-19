@@ -1,0 +1,17 @@
+# Logs & Temp files
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE & Editor settings
+.vscode/
+.idea/
+
+# Node & Build artifacts (para cuando se agreguen paquetes)
+node_modules/
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
