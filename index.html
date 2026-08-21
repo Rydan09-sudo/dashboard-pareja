@@ -1,25 +1,104 @@
 <!DOCTYPE html>
 <html lang="es">
-
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Our Life - Dashboard Personal & Pareja</title>
-
+  <title>Shared Life Hub - Dashboard Personal & Pareja</title>
+  
   <!-- PWA Metadata -->
   <link rel="manifest" href="manifest.json">
   <meta name="theme-color" content="#0f172a">
-  <meta name="description"
-    content="Dashboard de gestión financiera, hábitos y tareas compartidas para parejas y personal.">
-
+  <meta name="description" content="Dashboard de gestión financiera, hábitos y tareas compartidas para parejas y personal.">
+  
   <!-- Stylesheet -->
   <link rel="stylesheet" href="styles.css">
-
+  
   <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-</head>
 
+  <!-- Firebase SDKs (Compat version for browser) -->
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <!-- Firebase Local Config -->
+  <script src="firebase-config.js"></script>
+</head>
 <body>
+
+  <!-- Fullscreen Auth Screen (Shown when logged out or unlinked) -->
+  <div id="auth-screen" class="auth-fullscreen">
+    
+    <!-- Login / Sign Up Card -->
+    <div id="auth-card-login" class="glass-card auth-card">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <div class="logo-icon" style="margin: 0 auto 0.75rem auto; width: 56px; height: 56px; font-size: 1.8rem;">💑</div>
+        <h2 style="font-size: 1.5rem; font-weight: 700;">Shared Life Hub</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">Inicia sesión para acceder a tu dashboard</p>
+      </div>
+
+      <form id="login-form" onsubmit="handleEmailAuth(event)">
+        <div class="form-group">
+          <label for="auth-email">Correo Electrónico</label>
+          <input type="email" id="auth-email" class="form-input" placeholder="tu@email.com" required>
+        </div>
+
+        <div class="form-group">
+          <label for="auth-password">Contraseña</label>
+          <input type="password" id="auth-password" class="form-input" placeholder="••••••••" required>
+        </div>
+
+        <div id="auth-error" style="color: #f87171; font-size: 0.8rem; margin-bottom: 1rem; display: none;"></div>
+
+        <button type="submit" id="btn-auth-submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.75rem;">
+          Iniciar Sesión
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 1.25rem; font-size: 0.85rem; color: var(--text-muted);">
+        <span id="auth-toggle-msg">¿No tienes cuenta?</span>
+        <button onclick="toggleAuthMode()" style="background: none; border: none; color: #a5b4fc; font-weight: 600; cursor: pointer; text-decoration: underline; margin-left: 4px;">
+          <span id="auth-toggle-btn">Regístrate gratis</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Partner Link Card (Shown when logged in but not linked yet) -->
+    <div id="auth-card-link" class="glass-card auth-card" style="display: none;">
+      <div style="text-align: center; margin-bottom: 1.5rem;">
+        <div class="logo-icon" style="margin: 0 auto 0.75rem auto; width: 56px; height: 56px; font-size: 1.8rem;">💖</div>
+        <h2 style="font-size: 1.4rem; font-weight: 700;">Vincula a tu Pareja</h2>
+        <p style="color: var(--text-muted); font-size: 0.85rem;">Conecta dos cuentas para compartir gastos, hábitos y tareas en tiempo real.</p>
+      </div>
+
+      <!-- Step 1: My Code -->
+      <div class="form-group" style="background: rgba(15, 23, 42, 0.5); padding: 1rem; border-radius: var(--radius-md); text-align: center; border: 1px solid var(--glass-border);">
+        <span style="font-size: 0.8rem; color: var(--text-muted); display: block;">Tu Código Único de Pareja</span>
+        <div id="my-couple-code" style="font-size: 1.8rem; font-weight: 700; letter-spacing: 3px; color: #a5b4fc; margin: 0.3rem 0;">------</div>
+        <button onclick="copyCoupleCode()" class="btn-secondary" style="padding: 0.3rem 0.8rem; font-size: 0.75rem;">📋 Copiar Código</button>
+      </div>
+
+      <div style="text-align: center; color: var(--text-dim); margin: 1rem 0; font-size: 0.85rem;">— O INGRESA EL CÓDIGO DE TU PAREJA —</div>
+
+      <!-- Step 2: Enter Partner's Code -->
+      <form onsubmit="handleLinkPartner(event)">
+        <div class="form-group">
+          <input type="text" id="partner-code-input" class="form-input" placeholder="Ej. X8K29P" style="text-transform: uppercase; text-align: center; letter-spacing: 2px; font-weight: 700;" required>
+        </div>
+
+        <div id="link-error" style="color: #f87171; font-size: 0.8rem; margin-bottom: 1rem; display: none;"></div>
+
+        <button type="submit" class="btn-primary" style="width: 100%; justify-content: center; padding: 0.75rem;">
+          💖 Vincular Cuentas Ahora
+        </button>
+      </form>
+
+      <div style="text-align: center; margin-top: 1rem;">
+        <button onclick="handleSignOut()" style="background: none; border: none; color: var(--text-muted); font-size: 0.8rem; cursor: pointer;">Cerrar Sesión</button>
+      </div>
+    </div>
+
+  </div>
 
   <div class="app-container">
 
@@ -28,7 +107,7 @@
       <div class="logo-group">
         <div class="logo-icon">💑</div>
         <div class="logo-text">
-          <h1>Our Life</h1>
+          <h1>Shared Life Hub</h1>
           <span>Gestión Personal & En Pareja</span>
         </div>
       </div>
@@ -40,12 +119,16 @@
         <button class="view-btn" id="btn-view-couple" onclick="switchView('couple')">💖 Pareja</button>
       </div>
 
-      <!-- Couple Sync Badge -->
+      <!-- Couple Sync Badge & User Profile -->
       <div class="user-status-bar">
         <div class="couple-badge">
-          <div class="status-dot"></div>
-          <span id="partner-status">Sincronizado con Pareja</span>
+          <div class="status-dot" id="status-dot"></div>
+          <span id="partner-status">Buscando Pareja...</span>
         </div>
+        
+        <button onclick="handleSignOut()" class="btn-secondary" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" title="Cerrar Sesión">
+          🚪 Salir
+        </button>
       </div>
     </nav>
 
@@ -61,17 +144,17 @@
 
         <div class="balance-display">
           <span style="color: var(--text-muted); font-size: 0.9rem;">Balance Total Disponible</span>
-          <div class="balance-amount" id="total-balance">$4,250.00</div>
+          <div class="balance-amount" id="total-balance">$0.00</div>
         </div>
 
         <div class="balance-split">
           <div class="split-item income">
             <span>Ingresos del Mes</span>
-            <strong id="total-income">+$5,800.00</strong>
+            <strong id="total-income">+$0.00</strong>
           </div>
           <div class="split-item expense">
             <span>Gastos del Mes</span>
-            <strong id="total-expenses">-$1,550.00</strong>
+            <strong id="total-expenses">-$0.00</strong>
           </div>
         </div>
 
@@ -84,9 +167,8 @@
         <!-- Recent Movements List -->
         <div style="margin-top: 1.5rem;">
           <h4 style="font-size: 0.9rem; color: var(--text-muted); margin-bottom: 0.75rem;">Últimos Movimientos</h4>
-          <div id="transactions-list"
-            style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 180px; overflow-y: auto;">
-            <!-- Rendered dynamically -->
+          <div id="transactions-list" style="display: flex; flex-direction: column; gap: 0.5rem; max-height: 180px; overflow-y: auto;">
+            <!-- Rendered dynamically from Firestore -->
           </div>
         </div>
       </section>
@@ -106,12 +188,10 @@
       <section class="glass-card">
         <div class="card-header">
           <h2 class="card-title">⚡ Tracker de Hábitos</h2>
-          <button class="btn-primary" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" onclick="addHabitPrompt()">+
-            Nuevo</button>
+          <button class="btn-primary" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" onclick="addHabitPrompt()">+ Nuevo</button>
         </div>
 
         <div id="habits-list">
-          <!-- Habit Item 1 (Pareja) -->
           <div class="habit-item">
             <div class="habit-info">
               <h4>🏋️‍♂️ Ejercicio en pareja (30 min)</h4>
@@ -119,8 +199,6 @@
             </div>
             <button class="habit-check-btn completed" onclick="toggleHabit(this)">✓</button>
           </div>
-
-          <!-- Habit Item 2 (Personal) -->
           <div class="habit-item">
             <div class="habit-info">
               <h4>📚 Leer 20 páginas</h4>
@@ -135,8 +213,7 @@
       <section class="glass-card">
         <div class="card-header">
           <h2 class="card-title">📋 Tareas y Pendientes</h2>
-          <button class="btn-primary" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" onclick="addTaskPrompt()">+
-            Agregar</button>
+          <button class="btn-primary" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" onclick="addTaskPrompt()">+ Agregar</button>
         </div>
 
         <div id="tasks-list">
@@ -147,7 +224,6 @@
             </div>
             <input type="checkbox" style="width: 18px; height: 18px; cursor: pointer;">
           </div>
-
           <div class="task-item">
             <div>
               <strong style="font-size: 0.95rem;">💻 Subir proyecto a GitHub</strong>
@@ -174,7 +250,7 @@
         </div>
 
         <form id="transaction-form" onsubmit="handleSaveTransaction(event)">
-
+          
           <!-- Type Selection -->
           <div class="form-group">
             <label>Tipo de Movimiento</label>
@@ -190,8 +266,7 @@
           <!-- Description -->
           <div class="form-group">
             <label for="tx-description">Descripción / Concepto</label>
-            <input type="text" id="tx-description" class="form-input"
-              placeholder="Ej. Cena en restaurante, Sueldo, Mercado..." required>
+            <input type="text" id="tx-description" class="form-input" placeholder="Ej. Cena en restaurante, Sueldo, Mercado..." required>
           </div>
 
           <!-- Amount & Category -->
@@ -200,7 +275,7 @@
               <label for="tx-amount">Monto ($)</label>
               <input type="number" id="tx-amount" class="form-input" placeholder="0.00" step="0.01" min="0.01" required>
             </div>
-
+            
             <div class="form-group">
               <label for="tx-category">Categoría</label>
               <select id="tx-category" class="form-input">
@@ -248,5 +323,4 @@
   <script src="app.js"></script>
 
 </body>
-
 </html>
