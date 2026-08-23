@@ -1,53 +1,32 @@
-# 💑 Shared Life Hub - Dashboard Personal & De Pareja
+# React + TypeScript + Vite
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![PWA](https://img.shields.io/badge/PWA-Ready-success.svg)
-![Status](https://img.shields.io/badge/Status-En_Desarrollo-orange.svg)
+This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
 
-> **Shared Life Hub** es una Aplicación Web Progresiva (PWA) moderna y colaborativa diseñada para gestionar finanzas personales y compartidas en pareja, seguimiento de hábitos y gestión de tareas en tiempo real.
+Currently, two official plugins are available:
 
----
+- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
+- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
 
-## ✨ Características Principales
+## React Compiler
 
-- 💳 **Cuentas y Bolsillos (Personales y Compartidos)**:
-  - Registro de ingresos, gastos y transferencias.
-  - Cuentas compartidas en tiempo real donde ambos miembros pueden interactuar.
-  - División proporcional de gastos ajustable (ej. 50/50, 60/40).
-- 🔒 **Perfiles y Privacidad Aislada**:
-  - Lo etiquetado como *Personal* es estrictamente privado.
-  - Lo etiquetado como *Compartido* se sincroniza al instante entre perfiles vinculados.
-- ⚡ **Tracker de Hábitos**:
-  - Seguimiento de hábitos individuales y metas compartidas de pareja con contador de rachas (*streaks*).
-- 📋 **Tablero de Tareas**:
-  - Organización de pendientes individuales y grupales.
-- 📱 **Progressive Web App (PWA)**:
-  - Instalable en dispositivos móviles y PC.
-  - Notificaciones en tiempo real para cambios en espacios compartidos.
+The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
 
----
+## Expanding the Oxlint configuration
 
-## 🛠️ Tecnologías Utilizadas
+If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
 
-- **Frontend**: HTML5, CSS3 Moderno (Glassmorphism & Variables CSS), JavaScript (ES6+).
-- **Lógica e Interactividad**: Chart.js para visualizaciones financieras.
-- **Servicios Cloud / Realtime**: Firebase Authentication & Cloud Firestore.
-- **PWA**: Web App Manifest & Service Workers.
-- **Control de Versiones**: Git & GitHub.
+```json
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["react", "typescript", "oxc"],
+  "options": {
+    "typeAware": true
+  },
+  "rules": {
+    "react/rules-of-hooks": "error",
+    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+  }
+}
+```
 
----
-
-## 🚀 Instalación Local
-
-1. Clona este repositorio:
-   ```bash
-   git clone https://github.com/TU_USUARIO/dashboard-pareja.git
-   ```
-2. Abre la carpeta en tu editor preferido (ej. Antigravity IDE / VS Code).
-3. Abre el archivo `index.html` en tu navegador o mediante un servidor local (Live Server).
-
----
-
-## 📄 Licencia
-
-Este proyecto se distribuye bajo la licencia MIT.
+See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
