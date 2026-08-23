@@ -1,26 +1,226 @@
 /* ==========================================================================
-   Shared Life Hub - Application Logic
-   Handles: Transactions State, Modal UI, Dynamic Balances, Chart.js & PWA
+   Shared Life Hub - Application Logic & Real-time Firebase Firestore Sync
    ========================================================================== */
 
-// Initial Financial State (Demo Data)
+// Application State
+let currentUser = null;
+let userProfile = null;
+let coupleData = null;
 let currentViewMode = 'all';
+let isSignUpMode = false;
 
-let transactions = [
-  { id: 1, type: 'income', description: 'Sueldo Mensual', amount: 5800.00, category: 'Ahorros', scope: 'personal', split: '100-0', date: '2026-08-01' },
-  { id: 2, type: 'expense', description: 'Arriendo / Servicios', amount: 450.00, category: 'Hogar & Servicios', scope: 'couple', split: '50-50', date: '2026-08-05' },
-  { id: 3, type: 'expense', description: 'Mercado Semanal', amount: 600.00, category: 'Mercado', scope: 'couple', split: '60-40', date: '2026-08-10' },
-  { id: 4, type: 'expense', description: 'Cena & Cine Pareja', amount: 200.00, category: 'Entretenimiento', scope: 'couple', split: '50-50', date: '2026-08-14' },
-  { id: 5, type: 'expense', description: 'Fondo de Emergencia', amount: 300.00, category: 'Ahorros', scope: 'personal', split: '100-0', date: '2026-08-15' }
-];
-
+let transactions = [];
 let expensesChartInstance = null;
+let unsubscribeTransactions = null;
 
+// Initialization
 document.addEventListener('DOMContentLoaded', () => {
   initChart();
-  renderDashboardData();
+  setupAuthListener();
   registerServiceWorker();
 });
+
+/* ==========================================================================
+   FIREBASE AUTHENTICATION & PAIRING SYSTEM
+   ========================================================================== */
+
+function setupAuthListener() {
+  auth.onAuthStateChanged(async (user) => {
+    const authScreen = document.getElementById('auth-screen');
+    const authLoginCard = document.getElementById('auth-card-login');
+    const authLinkCard = document.getElementById('auth-card-link');
+    const partnerStatus = document.getElementById('partner-status');
+    const statusDot = document.getElementById('status-dot');
+
+    if (!user) {
+      // User is logged out
+      currentUser = null;
+      userProfile = null;
+      coupleData = null;
+      if (unsubscribeTransactions) unsubscribeTransactions();
+      
+      authScreen.style.display = 'flex';
+      authLoginCard.style.display = 'block';
+      authLinkCard.style.display = 'none';
+      return;
+    }
+
+    currentUser = user;
+
+    // Fetch or initialize user document in Firestore
+    const userRef = db.collection('users').doc(user.uid);
+    let doc = await userRef.get();
+
+    if (!doc.exists) {
+      // Create user document with unique coupleCode
+      const coupleCode = Math.random().toString(36).substring(2, 8).toUpperCase();
+      userProfile = {
+        uid: user.uid,
+        email: user.email,
+        coupleCode: coupleCode,
+        coupleId: null,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      };
+      await userRef.set(userProfile);
+    } else {
+      userProfile = doc.data();
+    }
+
+    // Check if user is linked to a couple
+    if (!userProfile.coupleId) {
+      // Show Link Screen
+      authScreen.style.display = 'flex';
+      authLoginCard.style.display = 'none';
+      authLinkCard.style.display = 'block';
+      document.getElementById('my-couple-code').innerText = userProfile.coupleCode;
+      return;
+    }
+
+    // User is logged in and linked!
+    authScreen.style.display = 'none';
+
+    // Fetch Couple Document
+    const coupleDoc = await db.collection('couples').doc(userProfile.coupleId).get();
+    if (coupleDoc.exists) {
+      coupleData = coupleDoc.data();
+      partnerStatus.innerText = '💖 Pareja Conectada';
+      statusDot.style.backgroundColor = '#10b981';
+      statusDot.style.boxShadow = '0 0 8px #10b981';
+    } else {
+      partnerStatus.innerText = '🔒 Solo Personal';
+    }
+
+    // Start Real-Time Firestore Sync
+    startRealtimeSync();
+  });
+}
+
+// Toggle between Login & Sign Up
+function toggleAuthMode() {
+  isSignUpMode = !isSignUpMode;
+  const title = document.getElementById('btn-auth-submit');
+  const msg = document.getElementById('auth-toggle-msg');
+  const btn = document.getElementById('auth-toggle-btn');
+  document.getElementById('auth-error').style.display = 'none';
+
+  if (isSignUpMode) {
+    title.innerText = 'Crear Cuenta Gratis';
+    msg.innerText = '¿Ya tienes cuenta?';
+    btn.innerText = 'Inicia sesión';
+  } else {
+    title.innerText = 'Iniciar Sesión';
+    msg.innerText = '¿No tienes cuenta?';
+    btn.innerText = 'Regístrate gratis';
+  }
+}
+
+// Email Auth Handler
+async function handleEmailAuth(event) {
+  event.preventDefault();
+  const email = document.getElementById('auth-email').value.trim();
+  const password = document.getElementById('auth-password').value;
+  const errorEl = document.getElementById('auth-error');
+
+  errorEl.style.display = 'none';
+
+  try {
+    if (isSignUpMode) {
+      await auth.createUserWithEmailAndPassword(email, password);
+    } else {
+      await auth.signInWithEmailAndPassword(email, password);
+    }
+  } catch (err) {
+    errorEl.innerText = err.message || 'Error al autenticar. Verifica tus datos.';
+    errorEl.style.display = 'block';
+  }
+}
+
+// Sign Out
+function handleSignOut() {
+  auth.signOut();
+}
+
+// Copy Couple Code to Clipboard
+function copyCoupleCode() {
+  const code = document.getElementById('my-couple-code').innerText;
+  navigator.clipboard.writeText(code);
+  alert(`¡Código ${code} copiado al portapapeles! Compártelo con tu pareja.`);
+}
+
+// Link Partner using Code
+async function handleLinkPartner(event) {
+  event.preventDefault();
+  const partnerCode = document.getElementById('partner-code-input').value.trim().toUpperCase();
+  const errorEl = document.getElementById('link-error');
+  errorEl.style.display = 'none';
+
+  if (partnerCode === userProfile.coupleCode) {
+    errorEl.innerText = 'No puedes ingresar tu propio código. Debes ingresar el código de tu pareja.';
+    errorEl.style.display = 'block';
+    return;
+  }
+
+  try {
+    // Search user with partnerCode
+    const snapshot = await db.collection('users').where('coupleCode', '==', partnerCode).get();
+
+    if (snapshot.empty) {
+      errorEl.innerText = 'Código no encontrado. Verifica que tu pareja te lo haya compartido bien.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    const partnerUserDoc = snapshot.docs[0];
+    const partnerData = partnerUserDoc.data();
+
+    // Create new Shared Couple Space ID
+    const newCoupleId = `couple_${userProfile.uid.substring(0,5)}_${partnerData.uid.substring(0,5)}`;
+
+    // Create Couple Document
+    await db.collection('couples').doc(newCoupleId).set({
+      coupleId: newCoupleId,
+      users: [userProfile.uid, partnerData.uid],
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    // Update both user profiles with coupleId
+    await db.collection('users').doc(userProfile.uid).update({ coupleId: newCoupleId });
+    await db.collection('users').doc(partnerData.uid).update({ coupleId: newCoupleId });
+
+    alert('🎉 ¡Cuentas vinculadas con éxito! Ahora ambos comparten el espacio de pareja.');
+    location.reload();
+
+  } catch (err) {
+    errorEl.innerText = 'Error al vincular cuentas. Inténtalo de nuevo.';
+    errorEl.style.display = 'block';
+  }
+}
+
+/* ==========================================================================
+   REAL-TIME FIRESTORE TRANSACTIONS SYNC
+   ========================================================================== */
+
+function startRealtimeSync() {
+  if (!currentUser) return;
+
+  // Query transactions where owner is user OR coupleId matches
+  let query = db.collection('transactions');
+
+  unsubscribeTransactions = query.onSnapshot((snapshot) => {
+    transactions = [];
+    snapshot.forEach(doc => {
+      const data = doc.data();
+      data.id = doc.id;
+      
+      // Filter locally for security: show if owner or shared couple
+      if (data.uid === currentUser.uid || (userProfile.coupleId && data.coupleId === userProfile.coupleId)) {
+        transactions.push(data);
+      }
+    });
+
+    renderDashboardData();
+  });
+}
 
 // View Switcher (All / Personal / Couple)
 function switchView(viewMode) {
@@ -30,10 +230,7 @@ function switchView(viewMode) {
   const btnCouple = document.getElementById('btn-view-couple');
   const badge = document.getElementById('financial-scope-badge');
 
-  // Reset active classes
-  [btnAll, btnPersonal, btnCouple].forEach(btn => {
-    btn.classList.remove('active', 'couple-active');
-  });
+  [btnAll, btnPersonal, btnCouple].forEach(btn => btn.classList.remove('active', 'couple-active'));
 
   if (viewMode === 'all') {
     btnAll.classList.add('active');
@@ -49,14 +246,13 @@ function switchView(viewMode) {
   renderDashboardData();
 }
 
-// Render Dashboard (Totals, List, Chart)
+// Render Dashboard Data
 function renderDashboardData() {
   const filteredTx = transactions.filter(tx => {
     if (currentViewMode === 'all') return true;
     return tx.scope === currentViewMode;
   });
 
-  // Calculate Totals
   let incomeTotal = 0;
   let expenseTotal = 0;
   const categoryTotals = {
@@ -81,8 +277,6 @@ function renderDashboardData() {
   });
 
   const balanceTotal = incomeTotal - expenseTotal;
-
-  // Format currency helper
   const fmt = val => `$${val.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   document.getElementById('total-balance').innerText = fmt(balanceTotal);
@@ -94,7 +288,7 @@ function renderDashboardData() {
   listEl.innerHTML = '';
 
   if (filteredTx.length === 0) {
-    listEl.innerHTML = `<div style="text-align: center; color: var(--text-dim); font-size: 0.85rem; padding: 1rem;">No hay movimientos en esta vista.</div>`;
+    listEl.innerHTML = `<div style="text-align: center; color: var(--text-dim); font-size: 0.85rem; padding: 1rem;">No hay movimientos registrados aún.</div>`;
   } else {
     filteredTx.slice().reverse().forEach(tx => {
       const item = document.createElement('div');
@@ -110,34 +304,27 @@ function renderDashboardData() {
         </div>
         <div style="display: flex; align-items: center; gap: 0.5rem;">
           <span class="tx-amount">${typeSign}${fmt(tx.amount)}</span>
-          <button onclick="deleteTransaction(${tx.id})" style="background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem;" title="Eliminar">&times;</button>
+          <button onclick="deleteTransaction('${tx.id}')" style="background: none; border: none; color: var(--text-dim); cursor: pointer; font-size: 0.9rem;" title="Eliminar">&times;</button>
         </div>
       `;
       listEl.appendChild(item);
     });
   }
 
-  // Update Chart
   updateChartData(categoryTotals);
 }
 
-// Chart.js Initialization
+// Chart.js Setup
 function initChart() {
   const ctx = document.getElementById('expensesChart').getContext('2d');
-
+  
   expensesChartInstance = new Chart(ctx, {
     type: 'doughnut',
     data: {
       labels: ['Hogar & Servicios', 'Mercado', 'Entretenimiento', 'Ahorros', 'Otros'],
       datasets: [{
-        data: [450, 600, 200, 300, 0],
-        backgroundColor: [
-          '#6366f1',
-          '#ec4899',
-          '#f59e0b',
-          '#10b981',
-          '#94a3b8'
-        ],
+        data: [0, 0, 0, 0, 0],
+        backgroundColor: ['#6366f1', '#ec4899', '#f59e0b', '#10b981', '#94a3b8'],
         borderWidth: 0,
         hoverOffset: 6
       }]
@@ -148,13 +335,7 @@ function initChart() {
       plugins: {
         legend: {
           position: 'right',
-          labels: {
-            color: '#94a3b8',
-            font: {
-              family: 'Outfit',
-              size: 12
-            }
-          }
+          labels: { color: '#94a3b8', font: { family: 'Outfit', size: 12 } }
         }
       },
       cutout: '70%'
@@ -164,7 +345,6 @@ function initChart() {
 
 function updateChartData(categoryTotals) {
   if (!expensesChartInstance) return;
-
   expensesChartInstance.data.datasets[0].data = [
     categoryTotals['Hogar & Servicios'],
     categoryTotals['Mercado'],
@@ -175,7 +355,7 @@ function updateChartData(categoryTotals) {
   expensesChartInstance.update();
 }
 
-// Modal Functions
+// Transaction Modal Controls
 function openTransactionModal() {
   document.getElementById('modal-backdrop').classList.add('open');
   toggleSplitOptions();
@@ -191,16 +371,14 @@ function toggleSplitOptions() {
   const scope = document.getElementById('tx-scope').value;
   const splitGroup = document.getElementById('split-group');
 
-  if (isExpense && scope === 'couple') {
-    splitGroup.style.display = 'block';
-  } else {
-    splitGroup.style.display = 'none';
-  }
+  splitGroup.style.display = (isExpense && scope === 'couple') ? 'block' : 'none';
 }
 
-function handleSaveTransaction(event) {
+// Save Transaction to Firestore
+async function handleSaveTransaction(event) {
   event.preventDefault();
-
+  if (!currentUser) return;
+  
   const type = document.querySelector('input[name="type"]:checked').value;
   const description = document.getElementById('tx-description').value.trim();
   const amount = parseFloat(document.getElementById('tx-amount').value);
@@ -211,37 +389,41 @@ function handleSaveTransaction(event) {
   if (!description || isNaN(amount) || amount <= 0) return;
 
   const newTx = {
-    id: Date.now(),
+    uid: currentUser.uid,
+    coupleId: scope === 'couple' ? (userProfile.coupleId || null) : null,
     type,
     description,
     amount,
     category,
     scope,
-    split: scope === 'couple' && type === 'expense' ? split : '100-0',
-    date: new Date().toISOString().split('T')[0]
+    split: (scope === 'couple' && type === 'expense') ? split : '100-0',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  transactions.push(newTx);
-  renderDashboardData();
-  closeTransactionModal();
-}
-
-function deleteTransaction(id) {
-  transactions = transactions.filter(t => t.id !== id);
-  renderDashboardData();
-}
-
-// Toggle Habit Completion
-function toggleHabit(button) {
-  button.classList.toggle('completed');
-  if (button.classList.contains('completed')) {
-    button.innerText = '✓';
-  } else {
-    button.innerText = '';
+  try {
+    await db.collection('transactions').add(newTx);
+    closeTransactionModal();
+  } catch (err) {
+    alert('Error al guardar movimiento en Firebase.');
   }
 }
 
-// Add Habit Prompt
+// Delete Transaction from Firestore
+async function deleteTransaction(docId) {
+  if (!confirm('¿Deseas eliminar este movimiento?')) return;
+  try {
+    await db.collection('transactions').doc(docId).delete();
+  } catch (err) {
+    alert('Error al eliminar movimiento.');
+  }
+}
+
+// Habit Controls
+function toggleHabit(button) {
+  button.classList.toggle('completed');
+  button.innerText = button.classList.contains('completed') ? '✓' : '';
+}
+
 function addHabitPrompt() {
   const title = prompt('Escribe el título del nuevo hábito:');
   if (title) {
@@ -259,7 +441,7 @@ function addHabitPrompt() {
   }
 }
 
-// Add Task Prompt
+// Task Controls
 function addTaskPrompt() {
   const title = prompt('Escribe el título de la tarea:');
   if (title) {
@@ -277,11 +459,11 @@ function addTaskPrompt() {
   }
 }
 
-// Service Worker Registration for PWA
+// Service Worker
 function registerServiceWorker() {
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js')
-      .then(reg => console.log('Service Worker registrado con éxito:', reg.scope))
-      .catch(err => console.log('Falló el registro del Service Worker:', err));
+      .then(reg => console.log('Service Worker registrado:', reg.scope))
+      .catch(err => console.log('Error Service Worker:', err));
   }
 }
