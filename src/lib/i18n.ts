@@ -49,15 +49,18 @@ export const translations = {
     english: 'Inglés',
     portuguese: 'Portugués',
     
-    // Finances
+    // Finances & Accounts
     financialSummary: 'Resumen Financiero',
-    financeSub: 'Control de ingresos, gastos e inversiones',
+    financeSub: 'Control de ingresos, gastos, transferencias y facturas recurrentes',
     newTransaction: 'Nueva Transacción',
+    editTransaction: 'Editar Movimiento',
     totalBalance: 'Balance Total',
     income: 'Ingresos',
     expenses: 'Gastos Total',
-    byCategory: 'Gastos por Categoría',
-    noExpenses: 'No hay gastos registrados en este periodo',
+    transfers: 'Transferencias',
+    bills: 'Facturas / Recurrentes',
+    byCategory: 'Gastos y Facturas por Categoría',
+    noExpenses: 'No hay gastos ni facturas registrados en este periodo',
     movementHistory: 'Histórico de Movimientos',
     noMovements: 'No hay movimientos agregados aún.',
     description: 'Descripción',
@@ -65,12 +68,40 @@ export const translations = {
     type: 'Tipo',
     category: 'Categoría',
     scope: 'Espacio',
+    date: 'Fecha',
+    account: 'Cuenta / Banco',
+    sourceAccount: 'Cuenta de Origen',
+    destAccount: 'Cuenta de Destino',
+    allAccounts: 'Todas las cuentas',
+    manageAccounts: 'Gestionar Cuentas',
+    newAccount: 'Nueva Cuenta',
+    accountName: 'Nombre de la cuenta (ej. Banco X, Efectivo)',
+    addAccount: 'Agregar Cuenta',
+    noAccountsYet: 'No hay cuentas creadas aún.',
+    selectAccount: 'Seleccionar cuenta',
+    selectDestAccount: 'Seleccionar destino',
+    
+    // Types
     expenseType: 'Gasto (-)',
     incomeType: 'Ingreso (+)',
+    transferType: 'Transferencia (⇄)',
+    billType: 'Factura Recurrente (📅)',
+    
+    // Categories Management
+    manageCategories: 'Gestionar Categorías',
+    newCategory: 'Nueva Categoría',
+    categoryName: 'Nombre de la categoría',
+    addCategory: 'Agregar Categoría',
+    editCategory: 'Editar Categoría',
+    saveCategory: 'Guardar',
+    
     cancel: 'Cancelar',
     saveTransaction: 'Guardar Transacción',
+    updateTransaction: 'Actualizar Transacción',
+    edit: 'Editar',
+    delete: 'Eliminar',
     
-    // Categories
+    // Default Categories
     catSupermarket: 'Supermercado',
     catServices: 'Servicios',
     catRestaurants: 'Restaurantes',
@@ -142,15 +173,18 @@ export const translations = {
     english: 'English',
     portuguese: 'Portuguese',
     
-    // Finances
+    // Finances & Accounts
     financialSummary: 'Financial Summary',
-    financeSub: 'Income, expense, and investment tracking',
+    financeSub: 'Income, expense, transfer, and recurring bill tracking',
     newTransaction: 'New Transaction',
+    editTransaction: 'Edit Transaction',
     totalBalance: 'Total Balance',
     income: 'Income',
     expenses: 'Total Expenses',
-    byCategory: 'Expenses by Category',
-    noExpenses: 'No expenses recorded in this period',
+    transfers: 'Transfers',
+    bills: 'Bills / Recurring',
+    byCategory: 'Expenses & Bills by Category',
+    noExpenses: 'No expenses or bills recorded in this period',
     movementHistory: 'Movement History',
     noMovements: 'No movements added yet.',
     description: 'Description',
@@ -158,12 +192,40 @@ export const translations = {
     type: 'Type',
     category: 'Category',
     scope: 'Scope',
+    date: 'Date',
+    account: 'Account / Bank',
+    sourceAccount: 'Source Account',
+    destAccount: 'Destination Account',
+    allAccounts: 'All Accounts',
+    manageAccounts: 'Manage Accounts',
+    newAccount: 'New Account',
+    accountName: 'Account name (e.g., Bank X, Cash)',
+    addAccount: 'Add Account',
+    noAccountsYet: 'No accounts created yet.',
+    selectAccount: 'Select account',
+    selectDestAccount: 'Select destination',
+    
+    // Types
     expenseType: 'Expense (-)',
     incomeType: 'Income (+)',
+    transferType: 'Transfer (⇄)',
+    billType: 'Recurring Bill (📅)',
+    
+    // Categories Management
+    manageCategories: 'Manage Categories',
+    newCategory: 'New Category',
+    categoryName: 'Category name',
+    addCategory: 'Add Category',
+    editCategory: 'Edit Category',
+    saveCategory: 'Save',
+    
     cancel: 'Cancel',
     saveTransaction: 'Save Transaction',
+    updateTransaction: 'Update Transaction',
+    edit: 'Edit',
+    delete: 'Delete',
     
-    // Categories
+    // Default Categories
     catSupermarket: 'Groceries',
     catServices: 'Utilities',
     catRestaurants: 'Dining Out',
@@ -235,15 +297,18 @@ export const translations = {
     english: 'Inglês',
     portuguese: 'Português',
     
-    // Finances
+    // Finances & Accounts
     financialSummary: 'Resumo Financeiro',
-    financeSub: 'Controle de receitas, despesas e investimentos',
+    financeSub: 'Controle de receitas, despesas, transferências e faturas recorrentes',
     newTransaction: 'Nova Transação',
+    editTransaction: 'Editar Movimentação',
     totalBalance: 'Saldo Total',
     income: 'Receitas',
     expenses: 'Despesas Totais',
-    byCategory: 'Despesas por Categoria',
-    noExpenses: 'Nenhuma despesa registrada neste período',
+    transfers: 'Transferências',
+    bills: 'Faturas / Recorrentes',
+    byCategory: 'Despesas e Faturas por Categoria',
+    noExpenses: 'Nenhuma despesa ou fatura registrada neste período',
     movementHistory: 'Histórico de Movimentos',
     noMovements: 'Nenhum movimento adicionado ainda.',
     description: 'Descrição',
@@ -251,12 +316,40 @@ export const translations = {
     type: 'Tipo',
     category: 'Categoria',
     scope: 'Espaço',
+    date: 'Data',
+    account: 'Conta / Banco',
+    sourceAccount: 'Conta de Origem',
+    destAccount: 'Conta de Destino',
+    allAccounts: 'Todas as Contas',
+    manageAccounts: 'Gerenciar Contas',
+    newAccount: 'Nova Conta',
+    accountName: 'Nome da conta (ex: Banco X, Dinheiro)',
+    addAccount: 'Adicionar Conta',
+    noAccountsYet: 'Nenhuma conta criada ainda.',
+    selectAccount: 'Selecionar conta',
+    selectDestAccount: 'Selecionar destino',
+    
+    // Types
     expenseType: 'Despesa (-)',
     incomeType: 'Receita (+)',
+    transferType: 'Transferência (⇄)',
+    billType: 'Fatura Recorrente (📅)',
+    
+    // Categories Management
+    manageCategories: 'Gerenciar Categorias',
+    newCategory: 'Nova Categoria',
+    categoryName: 'Nome da categoria',
+    addCategory: 'Adicionar Categoria',
+    editCategory: 'Editar Categoria',
+    saveCategory: 'Salvar',
+    
     cancel: 'Cancelar',
     saveTransaction: 'Salvar Transação',
+    updateTransaction: 'Atualizar Transação',
+    edit: 'Editar',
+    delete: 'Excluir',
     
-    // Categories
+    // Default Categories
     catSupermarket: 'Mercado',
     catServices: 'Serviços',
     catRestaurants: 'Restaurantes',

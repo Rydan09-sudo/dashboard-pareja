@@ -19,28 +19,45 @@ export interface Couple {
   createdAt?: any;
 }
 
-export type TransactionCategory = 
-  | 'Supermercado' 
-  | 'Servicios' 
-  | 'Restaurantes' 
-  | 'Entretenimiento' 
-  | 'Transporte' 
-  | 'Salud' 
-  | 'Otros';
+export interface Account {
+  id?: string;
+  uid: string;
+  coupleId?: string | null;
+  name: string;
+  color?: string;
+  scope: TransactionScope;
+  createdAt?: any;
+}
+
+export interface CategoryItem {
+  id?: string;
+  uid: string;
+  coupleId?: string | null;
+  name: string;
+  icon?: string;
+  scope: TransactionScope;
+  createdAt?: any;
+}
 
 export type TransactionScope = 'personal' | 'shared';
-export type TransactionType = 'expense' | 'income';
+export type TransactionType = 'expense' | 'income' | 'transfer' | 'bill';
 
 export interface Transaction {
   id?: string;
   uid: string;
   coupleId?: string | null;
+  accountId?: string;
+  accountName?: string;
+  toAccountId?: string;
+  toAccountName?: string;
   description: string;
   amount: number;
-  category: TransactionCategory;
+  category: string;
   type: TransactionType;
   scope: TransactionScope;
   date: string;
+  isRecurringBill?: boolean;
+  frequency?: 'monthly';
   createdAt?: any;
 }
 
