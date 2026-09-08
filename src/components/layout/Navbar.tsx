@@ -1,17 +1,17 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { auth } from '../../lib/firebase';
-import { Heart, LogOut, Users, User as UserIcon, Wallet, CheckSquare, Sparkles } from 'lucide-react';
+import { Heart, LogOut, Users, User as UserIcon, Wallet, CheckSquare, Sparkles, Settings } from 'lucide-react';
 
 interface NavbarProps {
-  activeTab: 'finances' | 'habits' | 'tasks';
-  setActiveTab: (tab: 'finances' | 'habits' | 'tasks') => void;
+  activeTab: 'finances' | 'habits' | 'tasks' | 'settings';
+  setActiveTab: (tab: 'finances' | 'habits' | 'tasks' | 'settings') => void;
   scope: 'all' | 'personal' | 'shared';
   setScope: (scope: 'all' | 'personal' | 'shared') => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, scope, setScope }) => {
-  const { userProfile, coupleData } = useAuth();
+  const { userProfile, coupleData, t } = useAuth();
 
   return (
     <header className="sticky top-0 z-40 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800">
@@ -28,7 +28,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, scope, 
               <div className="flex items-center space-x-1.5 mt-1">
                 <span className={`w-2 h-2 rounded-full ${coupleData ? 'bg-emerald-500 shadow-sm shadow-emerald-500' : 'bg-amber-500'}`} />
                 <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                  {coupleData ? 'Pareja Conectada' : 'Modo Personal'}
+                  {coupleData ? t.partnerConnected : t.personalMode}
                 </span>
               </div>
             </div>
@@ -45,7 +45,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, scope, 
               }`}
             >
               <Wallet className="w-4 h-4" />
-              <span>Finanzas</span>
+              <span>{t.finances}</span>
             </button>
 
             <button
@@ -57,7 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, scope, 
               }`}
             >
               <Sparkles className="w-4 h-4" />
-              <span>Hábitos</span>
+              <span>{t.habits}</span>
             </button>
 
             <button
@@ -69,12 +69,24 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, scope, 
               }`}
             >
               <CheckSquare className="w-4 h-4" />
-              <span>Tareas</span>
+              <span>{t.tasks}</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('settings')}
+              className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-xs font-semibold transition-all ${
+                activeTab === 'settings'
+                  ? 'bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              <span>{t.settings}</span>
             </button>
           </nav>
 
-          {/* Scope Filters & Logout */}
-          <div className="flex items-center space-x-3">
+          {/* Scope Filters & Settings / Logout */}
+          <div className="flex items-center space-x-2 sm:space-x-3">
             <div className="flex items-center bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl text-xs">
               <button
                 onClick={() => setScope('all')}
@@ -82,7 +94,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, scope, 
                   scope === 'all' ? 'bg-white dark:bg-slate-900 font-semibold shadow-sm text-slate-900 dark:text-white' : 'text-slate-500'
                 }`}
               >
-                Todo
+                {t.all}
               </button>
               <button
                 onClick={() => setScope('personal')}
@@ -91,7 +103,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, scope, 
                 }`}
               >
                 <UserIcon className="w-3 h-3" />
-                <span>Personal</span>
+                <span className="hidden sm:inline">{t.personal}</span>
               </button>
               <button
                 onClick={() => setScope('shared')}
@@ -100,13 +112,21 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, scope, 
                 }`}
               >
                 <Users className="w-3 h-3" />
-                <span>Compartido</span>
+                <span className="hidden sm:inline">{t.shared}</span>
               </button>
             </div>
 
             <button
+              onClick={() => setActiveTab('settings')}
+              title={t.settings}
+              className="md:hidden p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+
+            <button
               onClick={() => auth.signOut()}
-              title="Cerrar Sesión"
+              title={t.logout}
               className="p-2 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
             >
               <LogOut className="w-4 h-4" />

@@ -1,8 +1,14 @@
+export type Language = 'es' | 'en' | 'pt';
+export type ThemeMode = 'light' | 'dark' | 'system';
+
 export interface UserProfile {
   uid: string;
   email: string;
+  displayName?: string;
   coupleCode: string;
   coupleId: string | null;
+  language?: Language;
+  theme?: ThemeMode;
   createdAt?: any;
 }
 
