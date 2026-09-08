@@ -46,7 +46,7 @@ export const AuthCard: React.FC = () => {
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-indigo-50 dark:bg-indigo-950/50 text-indigo-600 dark:text-indigo-400 mb-4">
             <Heart className="w-6 h-6 fill-current" />
           </div>
-          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Shared Life Hub</h1>
+          <h1 className="text-2xl font-bold text-slate-900 dark:text-white">MayDa</h1>
           <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
             Finanzas compartidas y metas en pareja
           </p>

@@ -1,4 +1,4 @@
-# 💑 Shared Life Hub - Dashboard Personal & De Pareja
+# 💑 MayDa - Dashboard Personal & De Pareja
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![PWA](https://img.shields.io/badge/PWA-Ready-success.svg)
@@ -6,7 +6,7 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-blue.svg)
 ![TailwindCSS](https://img.shields.io/badge/Tailwind-3-38BDF8.svg)
 
-> **Shared Life Hub** es una Aplicación Web Progresiva (PWA) moderna, colaborativa y con diseño **Clean Fintech** diseñada para gestionar finanzas personales y compartidas en pareja, seguimiento de hábitos y gestión de tareas en tiempo real.
+> **MayDa** es una Aplicación Web Progresiva (PWA) moderna, colaborativa y con diseño **Clean Fintech** diseñada para gestionar finanzas personales y compartidas en pareja, seguimiento de hábitos y gestión de tareas en tiempo real.
 
 🌐 **Demo En Vivo**: [https://dashboard-pareja.web.app/](https://dashboard-pareja.web.app/)
 

@@ -9,8 +9,8 @@ export default defineConfig({
     VitePWA({
       registerType: 'autoUpdate',
       manifest: {
-        name: 'Shared Life Hub',
-        short_name: 'SharedHub',
+        name: 'MayDa - Personal & Pareja',
+        short_name: 'MayDa',
         description: 'Finanzas y Hábitos Compartidos en Pareja',
         theme_color: '#0f172a',
         background_color: '#0f172a',

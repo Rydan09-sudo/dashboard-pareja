@@ -15,7 +15,7 @@ const MainContent: React.FC = () => {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 text-slate-400 text-sm">
-        Cargando Shared Life Hub...
+        Cargando MayDa...
       </div>
     );
   }
