@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { updatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
-import { User, Lock, HeartHandshake, Globe, Moon, Sun, Copy, Check, Link2, ShieldCheck, CheckCircle } from 'lucide-react';
-import type { Language, ThemeMode } from '../../types';
+import { User, Lock, HeartHandshake, Globe, Moon, Sun, Copy, Check, Link2, CheckCircle } from 'lucide-react';
+import type { Language } from '../../types';
 
 export const SettingsScreen: React.FC = () => {
   const { userProfile, coupleData, linkPartner, updateProfileName, language, setLanguage, theme, setTheme, t } = useAuth();
