@@ -45,24 +45,6 @@ import {
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-const DEFAULT_EXPENSE_CATEGORIES = [
-  'Supermercado',
-  'Servicios',
-  'Restaurantes',
-  'Entretenimiento',
-  'Transporte',
-  'Salud',
-  'Otros'
-];
-
-const DEFAULT_INCOME_CATEGORIES = [
-  'Salario / Sueldo',
-  'Trabajo Independiente',
-  'Rendimientos / Inversiones',
-  'Regalos / Bonos',
-  'Otros Ingresos'
-];
-
 const CHART_COLORS = [
   '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6',
   '#14b8a6', '#f97316', '#06b6d4', '#e11d48', '#84cc16', '#64748b'
@@ -115,12 +97,18 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
     let q;
     if (scope === 'personal') {
       q = query(collection(db, 'transactions'), where('uid', '==', user.uid), where('scope', '==', 'personal'));
-    } else if (scope === 'shared' && userProfile.coupleId) {
-      q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
-    } else if (userProfile.coupleId) {
-      q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId));
+    } else if (scope === 'shared') {
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
+      } else {
+        q = query(collection(db, 'transactions'), where('uid', '==', user.uid), where('scope', '==', 'shared'));
+      }
     } else {
-      q = query(collection(db, 'transactions'), where('uid', '==', user.uid));
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId));
+      } else {
+        q = query(collection(db, 'transactions'), where('uid', '==', user.uid));
+      }
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -143,12 +131,18 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
     let q;
     if (scope === 'personal') {
       q = query(collection(db, 'accounts'), where('uid', '==', user.uid), where('scope', '==', 'personal'));
-    } else if (scope === 'shared' && userProfile.coupleId) {
-      q = query(collection(db, 'accounts'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
-    } else if (userProfile.coupleId) {
-      q = query(collection(db, 'accounts'), where('coupleId', '==', userProfile.coupleId));
+    } else if (scope === 'shared') {
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'accounts'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
+      } else {
+        q = query(collection(db, 'accounts'), where('uid', '==', user.uid), where('scope', '==', 'shared'));
+      }
     } else {
-      q = query(collection(db, 'accounts'), where('uid', '==', user.uid));
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'accounts'), where('coupleId', '==', userProfile.coupleId));
+      } else {
+        q = query(collection(db, 'accounts'), where('uid', '==', user.uid));
+      }
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -162,70 +156,73 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
     return () => unsubscribe();
   }, [user, userProfile, scope]);
 
-  // 3. Sync Categories & Seed defaults into Firestore if empty
+  // 3. Sync Categories without auto-seeding duplication bug
   useEffect(() => {
     if (!user || !userProfile) return;
 
     let q;
-    if (scope === 'personal') {
-      q = query(collection(db, 'categories'), where('uid', '==', user.uid), where('scope', '==', 'personal'));
-    } else if (scope === 'shared' && userProfile.coupleId) {
-      q = query(collection(db, 'categories'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
-    } else if (userProfile.coupleId) {
+    if (userProfile.coupleId) {
       q = query(collection(db, 'categories'), where('coupleId', '==', userProfile.coupleId));
     } else {
       q = query(collection(db, 'categories'), where('uid', '==', user.uid));
     }
 
-    const unsubscribe = onSnapshot(q, async (snapshot) => {
-      if (snapshot.empty) {
-        // Seed initial default categories in Firestore so user can edit/delete them freely
-        const batchPromises: Promise<any>[] = [];
-        DEFAULT_EXPENSE_CATEGORIES.forEach((name) => {
-          batchPromises.push(
-            addDoc(collection(db, 'categories'), {
-              uid: user.uid,
-              coupleId: userProfile.coupleId || null,
-              name,
-              type: 'expense',
-              scope: 'shared',
-              createdAt: serverTimestamp()
-            })
-          );
-        });
-        DEFAULT_INCOME_CATEGORIES.forEach((name) => {
-          batchPromises.push(
-            addDoc(collection(db, 'categories'), {
-              uid: user.uid,
-              coupleId: userProfile.coupleId || null,
-              name,
-              type: 'income',
-              scope: 'shared',
-              createdAt: serverTimestamp()
-            })
-          );
-        });
-        await Promise.all(batchPromises);
-      } else {
-        const docs: CategoryItem[] = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data()
-        } as CategoryItem));
-        setCategories(docs);
-      }
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs: CategoryItem[] = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as CategoryItem));
+
+      // Deduplicate by lowercase name & type, and safely clean up ghost duplicate docs from Firestore in background
+      const seen = new Map<string, string>();
+      const uniqueDocs: CategoryItem[] = [];
+
+      docs.forEach((item) => {
+        const key = `${item.type}_${item.name.trim().toLowerCase()}`;
+        if (!seen.has(key)) {
+          seen.set(key, item.id || '');
+          uniqueDocs.push(item);
+        } else if (item.id) {
+          // Clean up ghost duplicate created previously
+          deleteDoc(doc(db, 'categories', item.id)).catch(console.error);
+        }
+      });
+
+      setCategories(uniqueDocs);
     });
 
     return () => unsubscribe();
-  }, [user, userProfile, scope]);
+  }, [user, userProfile]);
+
+  // Fallback category lists when user has no custom categories in Firestore yet
+  const fallbackExpenseCategories: CategoryItem[] = useMemo(() => [
+    { name: 'Supermercado', type: 'expense', scope: 'shared', uid: '' },
+    { name: 'Servicios', type: 'expense', scope: 'shared', uid: '' },
+    { name: 'Restaurantes', type: 'expense', scope: 'shared', uid: '' },
+    { name: 'Entretenimiento', type: 'expense', scope: 'shared', uid: '' },
+    { name: 'Transporte', type: 'expense', scope: 'shared', uid: '' },
+    { name: 'Salud', type: 'expense', scope: 'shared', uid: '' },
+    { name: 'Otros', type: 'expense', scope: 'shared', uid: '' },
+  ], []);
+
+  const fallbackIncomeCategories: CategoryItem[] = useMemo(() => [
+    { name: 'Salario / Sueldo', type: 'income', scope: 'shared', uid: '' },
+    { name: 'Trabajo Independiente', type: 'income', scope: 'shared', uid: '' },
+    { name: 'Rendimientos / Inversiones', type: 'income', scope: 'shared', uid: '' },
+    { name: 'Regalos / Bonos', type: 'income', scope: 'shared', uid: '' },
+    { name: 'Otros Ingresos', type: 'income', scope: 'shared', uid: '' },
+  ], []);
 
   // Filtered categories according to current selected transaction type
   const availableExpenseCategories = useMemo(() => {
-    return categories.filter((c) => c.type === 'expense');
-  }, [categories]);
+    const fromDb = categories.filter((c) => c.type === 'expense');
+    return fromDb.length > 0 ? fromDb : fallbackExpenseCategories;
+  }, [categories, fallbackExpenseCategories]);
 
   const availableIncomeCategories = useMemo(() => {
-    return categories.filter((c) => c.type === 'income');
-  }, [categories]);
+    const fromDb = categories.filter((c) => c.type === 'income');
+    return fromDb.length > 0 ? fromDb : fallbackIncomeCategories;
+  }, [categories, fallbackIncomeCategories]);
 
   const currentCategoriesForTx = type === 'expense' ? availableExpenseCategories : availableIncomeCategories;
 
