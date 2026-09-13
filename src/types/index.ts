@@ -19,14 +19,32 @@ export interface Couple {
   createdAt?: any;
 }
 
-export type TransactionCategory = 
-  | 'Supermercado' 
-  | 'Servicios' 
-  | 'Restaurantes' 
-  | 'Entretenimiento' 
-  | 'Transporte' 
-  | 'Salud' 
-  | 'Otros';
+export type CategoryType = 'expense' | 'income';
+
+export interface CategoryItem {
+  id?: string;
+  uid: string;
+  coupleId?: string | null;
+  name: string;
+  type: CategoryType;
+  color?: string;
+  scope: TransactionScope;
+  createdAt?: any;
+}
+
+export type AccountType = 'bank' | 'wallet' | 'cash' | 'credit' | 'savings' | 'investment' | 'other';
+
+export interface Account {
+  id?: string;
+  uid: string;
+  coupleId?: string | null;
+  name: string;
+  type: AccountType;
+  initialBalance: number;
+  color?: string;
+  scope: TransactionScope;
+  createdAt?: any;
+}
 
 export type TransactionScope = 'personal' | 'shared';
 export type TransactionType = 'expense' | 'income';
@@ -37,7 +55,10 @@ export interface Transaction {
   coupleId?: string | null;
   description: string;
   amount: number;
-  category: TransactionCategory;
+  category: string;
+  categoryId?: string;
+  account?: string;
+  accountId?: string;
   type: TransactionType;
   scope: TransactionScope;
   date: string;

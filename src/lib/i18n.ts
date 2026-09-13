@@ -14,6 +14,9 @@ export const translations = {
     partnerConnected: 'Pareja Conectada',
     personalMode: 'Modo Personal',
     logout: 'Cerrar Sesión',
+    activitySection: 'Actividades',
+    accountSection: 'Tipo de Cuenta',
+    systemSection: 'Ajustes y Cuenta',
     
     // Auth & Link
     email: 'Correo Electrónico',
@@ -70,7 +73,44 @@ export const translations = {
     cancel: 'Cancelar',
     saveTransaction: 'Guardar Transacción',
     
+    // Accounts & Categories
+    accounts: 'Cuentas',
+    manageAccounts: 'Gestionar Cuentas',
+    newAccount: 'Nueva Cuenta',
+    editAccount: 'Editar Cuenta',
+    accountName: 'Nombre de la Cuenta',
+    accountType: 'Tipo de Cuenta',
+    initialBalance: 'Saldo Inicial',
+    currentBalance: 'Saldo Actual',
+    noAccounts: 'No tienes cuentas registradas. Agrega tu primera cuenta para organizar mejor tus finanzas.',
+    selectAccount: 'Cuenta / Billetera',
+    allAccounts: 'Todas las Cuentas',
+    bankAccount: 'Cuenta Bancaria',
+    digitalWallet: 'Billetera Digital',
+    cash: 'Efectivo',
+    creditCard: 'Tarjeta de Crédito',
+    savingsAccount: 'Ahorros',
+    investment: 'Inversión',
+    otherAccount: 'Otro',
+
     // Categories
+    manageCategories: 'Gestionar Categorías',
+    newCategory: 'Nueva Categoría',
+    editCategory: 'Editar Categoría',
+    categoryName: 'Nombre de Categoría',
+    categoryType: 'Tipo de Categoría',
+    expenseCategories: 'Categorías de Gastos',
+    incomeCategories: 'Categorías de Ingresos',
+    noCategories: 'No hay categorías configuradas para este tipo.',
+    addCategoryPrompt: 'Agrega tus categorías para clasificar tus movimientos.',
+    incomeCategory: 'Categoría de Ingreso',
+    expenseCategory: 'Categoría de Gasto',
+    edit: 'Editar',
+    delete: 'Eliminar',
+    saveChanges: 'Guardar Cambios',
+    create: 'Crear',
+
+    // Default Categories
     catSupermarket: 'Supermercado',
     catServices: 'Servicios',
     catRestaurants: 'Restaurantes',
@@ -78,6 +118,10 @@ export const translations = {
     catTransport: 'Transporte',
     catHealth: 'Salud',
     catOthers: 'Otros',
+    catSalary: 'Salario / Sueldo',
+    catFreelance: 'Trabajos Independientes',
+    catInvestments: 'Rendimientos / Inversiones',
+    catGifts: 'Regalos / Bonos',
     
     // Habits
     habitTracking: 'Seguimiento de Hábitos',
@@ -107,6 +151,9 @@ export const translations = {
     partnerConnected: 'Partner Connected',
     personalMode: 'Personal Mode',
     logout: 'Log Out',
+    activitySection: 'Activities',
+    accountSection: 'Account Type',
+    systemSection: 'Settings & Account',
     
     // Auth & Link
     email: 'Email Address',
@@ -163,7 +210,44 @@ export const translations = {
     cancel: 'Cancel',
     saveTransaction: 'Save Transaction',
     
+    // Accounts & Categories
+    accounts: 'Accounts',
+    manageAccounts: 'Manage Accounts',
+    newAccount: 'New Account',
+    editAccount: 'Edit Account',
+    accountName: 'Account Name',
+    accountType: 'Account Type',
+    initialBalance: 'Initial Balance',
+    currentBalance: 'Current Balance',
+    noAccounts: 'No accounts registered yet. Add your first account to better organize your finances.',
+    selectAccount: 'Account / Wallet',
+    allAccounts: 'All Accounts',
+    bankAccount: 'Bank Account',
+    digitalWallet: 'Digital Wallet',
+    cash: 'Cash',
+    creditCard: 'Credit Card',
+    savingsAccount: 'Savings',
+    investment: 'Investment',
+    otherAccount: 'Other',
+
     // Categories
+    manageCategories: 'Manage Categories',
+    newCategory: 'New Category',
+    editCategory: 'Edit Category',
+    categoryName: 'Category Name',
+    categoryType: 'Category Type',
+    expenseCategories: 'Expense Categories',
+    incomeCategories: 'Income Categories',
+    noCategories: 'No categories configured for this type.',
+    addCategoryPrompt: 'Add your custom categories to classify your transactions.',
+    incomeCategory: 'Income Category',
+    expenseCategory: 'Expense Category',
+    edit: 'Edit',
+    delete: 'Delete',
+    saveChanges: 'Save Changes',
+    create: 'Create',
+
+    // Default Categories
     catSupermarket: 'Groceries',
     catServices: 'Utilities',
     catRestaurants: 'Dining Out',
@@ -171,6 +255,10 @@ export const translations = {
     catTransport: 'Transportation',
     catHealth: 'Healthcare',
     catOthers: 'Others',
+    catSalary: 'Salary / Wages',
+    catFreelance: 'Freelance / Side Gig',
+    catInvestments: 'Investments / Returns',
+    catGifts: 'Gifts / Bonuses',
     
     // Habits
     habitTracking: 'Habit Tracker',
@@ -200,6 +288,9 @@ export const translations = {
     partnerConnected: 'Parceiro Conectado',
     personalMode: 'Modo Pessoal',
     logout: 'Sair',
+    activitySection: 'Atividades',
+    accountSection: 'Tipo de Conta',
+    systemSection: 'Configurações e Conta',
     
     // Auth & Link
     email: 'Endereço de E-mail',
@@ -256,7 +347,44 @@ export const translations = {
     cancel: 'Cancelar',
     saveTransaction: 'Salvar Transação',
     
+    // Accounts & Categories
+    accounts: 'Contas',
+    manageAccounts: 'Gerenciar Contas',
+    newAccount: 'Nova Conta',
+    editAccount: 'Editar Conta',
+    accountName: 'Nome da Conta',
+    accountType: 'Tipo de Conta',
+    initialBalance: 'Saldo Inicial',
+    currentBalance: 'Saldo Atual',
+    noAccounts: 'Você não tem contas cadastradas. Adicione sua primeira conta para organizar melhor suas finanças.',
+    selectAccount: 'Conta / Carteira',
+    allAccounts: 'Todas as Contas',
+    bankAccount: 'Conta Bancária',
+    digitalWallet: 'Carteira Digital',
+    cash: 'Dinheiro',
+    creditCard: 'Cartão de Crédito',
+    savingsAccount: 'Poupança',
+    investment: 'Investimento',
+    otherAccount: 'Outro',
+
     // Categories
+    manageCategories: 'Gerenciar Categorias',
+    newCategory: 'Nova Categoria',
+    editCategory: 'Editar Categoria',
+    categoryName: 'Nome da Categoria',
+    categoryType: 'Tipo de Categoria',
+    expenseCategories: 'Categorias de Despesas',
+    incomeCategories: 'Categorias de Receitas',
+    noCategories: 'Não há categorias configuradas para este tipo.',
+    addCategoryPrompt: 'Adicione suas categorias personalizadas para classificar suas transações.',
+    incomeCategory: 'Categoria de Receita',
+    expenseCategory: 'Categoria de Despesa',
+    edit: 'Editar',
+    delete: 'Excluir',
+    saveChanges: 'Salvar Alterações',
+    create: 'Criar',
+
+    // Default Categories
     catSupermarket: 'Mercado',
     catServices: 'Serviços',
     catRestaurants: 'Restaurantes',
@@ -264,6 +392,10 @@ export const translations = {
     catTransport: 'Transporte',
     catHealth: 'Saúde',
     catOthers: 'Outros',
+    catSalary: 'Salário / Renda',
+    catFreelance: 'Freelance / Bicos',
+    catInvestments: 'Rendimentos / Investimentos',
+    catGifts: 'Presentes / Bônus',
     
     // Habits
     habitTracking: 'Rastreamento de Hábitos',
