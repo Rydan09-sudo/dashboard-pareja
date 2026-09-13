@@ -115,12 +115,18 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
     let q;
     if (scope === 'personal') {
       q = query(collection(db, 'transactions'), where('uid', '==', user.uid), where('scope', '==', 'personal'));
-    } else if (scope === 'shared' && userProfile.coupleId) {
-      q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
-    } else if (userProfile.coupleId) {
-      q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId));
+    } else if (scope === 'shared') {
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
+      } else {
+        q = query(collection(db, 'transactions'), where('uid', '==', user.uid), where('scope', '==', 'shared'));
+      }
     } else {
-      q = query(collection(db, 'transactions'), where('uid', '==', user.uid));
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId));
+      } else {
+        q = query(collection(db, 'transactions'), where('uid', '==', user.uid));
+      }
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -143,12 +149,18 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
     let q;
     if (scope === 'personal') {
       q = query(collection(db, 'accounts'), where('uid', '==', user.uid), where('scope', '==', 'personal'));
-    } else if (scope === 'shared' && userProfile.coupleId) {
-      q = query(collection(db, 'accounts'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
-    } else if (userProfile.coupleId) {
-      q = query(collection(db, 'accounts'), where('coupleId', '==', userProfile.coupleId));
+    } else if (scope === 'shared') {
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'accounts'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
+      } else {
+        q = query(collection(db, 'accounts'), where('uid', '==', user.uid), where('scope', '==', 'shared'));
+      }
     } else {
-      q = query(collection(db, 'accounts'), where('uid', '==', user.uid));
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'accounts'), where('coupleId', '==', userProfile.coupleId));
+      } else {
+        q = query(collection(db, 'accounts'), where('uid', '==', user.uid));
+      }
     }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -169,12 +181,18 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
     let q;
     if (scope === 'personal') {
       q = query(collection(db, 'categories'), where('uid', '==', user.uid), where('scope', '==', 'personal'));
-    } else if (scope === 'shared' && userProfile.coupleId) {
-      q = query(collection(db, 'categories'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
-    } else if (userProfile.coupleId) {
-      q = query(collection(db, 'categories'), where('coupleId', '==', userProfile.coupleId));
+    } else if (scope === 'shared') {
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'categories'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
+      } else {
+        q = query(collection(db, 'categories'), where('uid', '==', user.uid), where('scope', '==', 'shared'));
+      }
     } else {
-      q = query(collection(db, 'categories'), where('uid', '==', user.uid));
+      if (userProfile.coupleId) {
+        q = query(collection(db, 'categories'), where('coupleId', '==', userProfile.coupleId));
+      } else {
+        q = query(collection(db, 'categories'), where('uid', '==', user.uid));
+      }
     }
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
