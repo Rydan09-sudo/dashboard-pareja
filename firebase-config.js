@@ -1,5 +1,5 @@
 /* ==========================================================================
-   Shared Life Hub - Firebase Initialization & Configuration
+   MayDa - Firebase Initialization & Configuration
    ========================================================================== */
 
 const firebaseConfig = {

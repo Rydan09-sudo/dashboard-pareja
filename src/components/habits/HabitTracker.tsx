@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot, addDoc, serverTimestamp, updateDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
 import type { Habit } from '../../types';
-import { Sparkles, Plus, CheckCircle2, Flame, Trash2 } from 'lucide-react';
+import { Plus, CheckCircle2, Flame, Trash2 } from 'lucide-react';
 
 interface HabitTrackerProps {
   scope: 'all' | 'personal' | 'shared';

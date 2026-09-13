@@ -1,47 +1,71 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  serverTimestamp, 
-  deleteDoc, 
-  doc, 
-  updateDoc 
+import React, { useEffect, useState, useMemo } from 'react';
+import {
+  collection,
+  query,
+  where,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+  serverTimestamp
 } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
 import { useAuth } from '../../context/AuthContext';
-import type { 
-  Transaction, 
-  TransactionScope, 
+import type {
+  Transaction,
+  TransactionScope,
   TransactionType,
   Account,
-  CategoryItem
+  AccountType,
+  CategoryItem,
+  CategoryType
 } from '../../types';
 import { Doughnut } from 'react-chartjs-2';
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js';
-import { 
-  Plus, 
-  TrendingUp, 
-  TrendingDown, 
-  Trash2, 
-  Tag, 
-  Calendar, 
-  Wallet, 
-  Edit3, 
-  Building2, 
-  Filter,
-  ArrowRightLeft,
-  Receipt,
-  FolderPlus,
-  Repeat
+import {
+  Plus,
+  TrendingUp,
+  TrendingDown,
+  Trash2,
+  Tag,
+  Calendar,
+  Wallet,
+  Landmark,
+  CreditCard,
+  Coins,
+  Smartphone,
+  PiggyBank,
+  Edit2,
+  SlidersHorizontal,
+  X,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 
 ChartJS.register(ArcElement, Tooltip, Legend);
 
-const DEFAULT_CATEGORIES = [
-  'Supermercado', 'Servicios', 'Restaurantes', 'Entretenimiento', 'Transporte', 'Salud', 'Otros'
+const DEFAULT_EXPENSE_CATEGORIES = [
+  'Supermercado',
+  'Servicios',
+  'Restaurantes',
+  'Entretenimiento',
+  'Transporte',
+  'Salud',
+  'Otros'
+];
+
+const DEFAULT_INCOME_CATEGORIES = [
+  'Salario / Sueldo',
+  'Trabajo Independiente',
+  'Rendimientos / Inversiones',
+  'Regalos / Bonos',
+  'Otros Ingresos'
+];
+
+const CHART_COLORS = [
+  '#6366f1', '#10b981', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6',
+  '#14b8a6', '#f97316', '#06b6d4', '#e11d48', '#84cc16', '#64748b'
 ];
 
 interface FinanceDashboardProps {
@@ -52,66 +76,67 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
   const { user, userProfile, t } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [customCategories, setCustomCategories] = useState<CategoryItem[]>([]);
+  const [categories, setCategories] = useState<CategoryItem[]>([]);
   const [selectedAccountId, setSelectedAccountId] = useState<string>('all');
 
-  // Modals
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  // Modals state
+  const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  // Editing state
+  const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+  const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
 
   // Transaction Form State
   const [description, setDescription] = useState('');
-  const [amountRaw, setAmountRaw] = useState('');
+  const [amount, setAmount] = useState('');
   const [type, setType] = useState<TransactionType>('expense');
-  const [category, setCategory] = useState<string>('Supermercado');
-  const [transactionScope, setTransactionScope] = useState<TransactionScope>('shared');
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [category, setCategory] = useState<string>('');
   const [accountId, setAccountId] = useState<string>('');
-  const [toAccountId, setToAccountId] = useState<string>('');
+  const [transactionScope, setTransactionScope] = useState<TransactionScope>('shared');
 
   // Account Form State
-  const [newAccountName, setNewAccountName] = useState('');
-  const [newAccountScope, setNewAccountScope] = useState<TransactionScope>('personal');
+  const [accountName, setAccountName] = useState('');
+  const [accountType, setAccountType] = useState<AccountType>('bank');
+  const [accountInitialBalance, setAccountInitialBalance] = useState('');
+  const [accountScope, setAccountScope] = useState<TransactionScope>('personal');
 
   // Category Form State
   const [newCatName, setNewCatName] = useState('');
-  const [editingCategory, setEditingCategory] = useState<CategoryItem | null>(null);
-  const [editCatName, setEditCatName] = useState('');
+  const [newCatType, setNewCatType] = useState<CategoryType>('expense');
+  const [newCatScope, setNewCatScope] = useState<TransactionScope>('shared');
+  const [categoryTab, setCategoryTab] = useState<CategoryType>('expense');
 
-  // Number formatting helper: format numeric string with thousands and decimal separators
-  const formatAmountInput = (val: string): string => {
-    // Remove all characters except digits and comma/dot
-    const clean = val.replace(/[^0-9.]/g, '');
-    const parts = clean.split('.');
-    
-    // Format integer part with thousand commas or dots
-    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-    
-    // Only allow at most 2 decimal digits
-    if (parts.length > 2) {
-      return parts[0] + '.' + parts.slice(1).join('');
+  // 1. Sync Transactions
+  useEffect(() => {
+    if (!user || !userProfile) return;
+
+    let q;
+    if (scope === 'personal') {
+      q = query(collection(db, 'transactions'), where('uid', '==', user.uid), where('scope', '==', 'personal'));
+    } else if (scope === 'shared' && userProfile.coupleId) {
+      q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
+    } else if (userProfile.coupleId) {
+      q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId));
+    } else {
+      q = query(collection(db, 'transactions'), where('uid', '==', user.uid));
     }
-    return parts.join('.');
-  };
 
-  const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawVal = e.target.value;
-    // Strip commas for parsing
-    const numericOnly = rawVal.replace(/,/g, '');
-    if (numericOnly === '' || !isNaN(Number(numericOnly)) || numericOnly.endsWith('.')) {
-      setAmountRaw(formatAmountInput(numericOnly));
-    }
-  };
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const docs: Transaction[] = snapshot.docs.map((docSnap) => ({
+        id: docSnap.id,
+        ...docSnap.data()
+      } as Transaction));
 
-  // Get raw float number from formatted string
-  const getNumericAmount = (formatted: string): number => {
-    const unformatted = formatted.replace(/,/g, '');
-    return parseFloat(unformatted) || 0;
-  };
+      docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setTransactions(docs);
+    });
 
-  // Fetch Accounts in real-time
+    return () => unsubscribe();
+  }, [user, userProfile, scope]);
+
+  // 2. Sync Accounts
   useEffect(() => {
     if (!user || !userProfile) return;
 
@@ -137,7 +162,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
     return () => unsubscribe();
   }, [user, userProfile, scope]);
 
-  // Fetch Custom Categories in real-time
+  // 3. Sync Categories & Seed defaults into Firestore if empty
   useEffect(() => {
     if (!user || !userProfile) return;
 
@@ -152,290 +177,356 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
       q = query(collection(db, 'categories'), where('uid', '==', user.uid));
     }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs: CategoryItem[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      } as CategoryItem));
-      setCustomCategories(docs);
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+      if (snapshot.empty) {
+        // Seed initial default categories in Firestore so user can edit/delete them freely
+        const batchPromises: Promise<any>[] = [];
+        DEFAULT_EXPENSE_CATEGORIES.forEach((name) => {
+          batchPromises.push(
+            addDoc(collection(db, 'categories'), {
+              uid: user.uid,
+              coupleId: userProfile.coupleId || null,
+              name,
+              type: 'expense',
+              scope: 'shared',
+              createdAt: serverTimestamp()
+            })
+          );
+        });
+        DEFAULT_INCOME_CATEGORIES.forEach((name) => {
+          batchPromises.push(
+            addDoc(collection(db, 'categories'), {
+              uid: user.uid,
+              coupleId: userProfile.coupleId || null,
+              name,
+              type: 'income',
+              scope: 'shared',
+              createdAt: serverTimestamp()
+            })
+          );
+        });
+        await Promise.all(batchPromises);
+      } else {
+        const docs: CategoryItem[] = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        } as CategoryItem));
+        setCategories(docs);
+      }
     });
 
     return () => unsubscribe();
   }, [user, userProfile, scope]);
 
-  // Fetch Transactions in real-time
-  useEffect(() => {
-    if (!user || !userProfile) return;
+  // Filtered categories according to current selected transaction type
+  const availableExpenseCategories = useMemo(() => {
+    return categories.filter((c) => c.type === 'expense');
+  }, [categories]);
 
-    let q;
-    if (scope === 'personal') {
-      q = query(collection(db, 'transactions'), where('uid', '==', user.uid), where('scope', '==', 'personal'));
-    } else if (scope === 'shared' && userProfile.coupleId) {
-      q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId), where('scope', '==', 'shared'));
-    } else if (userProfile.coupleId) {
-      q = query(collection(db, 'transactions'), where('coupleId', '==', userProfile.coupleId));
+  const availableIncomeCategories = useMemo(() => {
+    return categories.filter((c) => c.type === 'income');
+  }, [categories]);
+
+  const currentCategoriesForTx = type === 'expense' ? availableExpenseCategories : availableIncomeCategories;
+
+  // Set default category when type or category list changes
+  useEffect(() => {
+    if (currentCategoriesForTx.length > 0) {
+      if (!currentCategoriesForTx.some((c) => c.name === category)) {
+        setCategory(currentCategoriesForTx[0].name);
+      }
     } else {
-      q = query(collection(db, 'transactions'), where('uid', '==', user.uid));
+      setCategory('');
+    }
+  }, [type, currentCategoriesForTx]);
+
+  // Calculate balances per account
+  const accountBalances = useMemo(() => {
+    const balances: Record<string, number> = {};
+    accounts.forEach((acc) => {
+      if (acc.id) {
+        let bal = Number(acc.initialBalance) || 0;
+        transactions.forEach((tx) => {
+          if (tx.accountId === acc.id || tx.account === acc.name) {
+            if (tx.type === 'income') bal += tx.amount;
+            else if (tx.type === 'expense') bal -= tx.amount;
+          }
+        });
+        balances[acc.id] = bal;
+      }
+    });
+    return balances;
+  }, [accounts, transactions]);
+
+  // Filter transactions by selected account if any
+  const filteredTransactions = useMemo(() => {
+    if (selectedAccountId === 'all') return transactions;
+    return transactions.filter(
+      (t) => t.accountId === selectedAccountId || accounts.find((a) => a.id === selectedAccountId)?.name === t.account
+    );
+  }, [transactions, selectedAccountId, accounts]);
+
+  // Calculations
+  const totalIncome = useMemo(() => {
+    return filteredTransactions.filter((t) => t.type === 'income').reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
+
+  const totalExpense = useMemo(() => {
+    return filteredTransactions.filter((t) => t.type === 'expense').reduce((acc, t) => acc + t.amount, 0);
+  }, [filteredTransactions]);
+
+  const totalBalance = useMemo(() => {
+    if (selectedAccountId !== 'all' && accounts.length > 0) {
+      return accountBalances[selectedAccountId] ?? (totalIncome - totalExpense);
+    }
+    // Sum initial balances of all active accounts + net movements
+    const totalInitial = accounts.reduce((acc, a) => acc + (Number(a.initialBalance) || 0), 0);
+    return totalInitial + (totalIncome - totalExpense);
+  }, [selectedAccountId, accounts, accountBalances, totalIncome, totalExpense]);
+
+  // Chart Data Preparation (by categories)
+  const chartData = useMemo(() => {
+    const catTotals: { label: string; amount: number }[] = [];
+    const targetCategories = availableExpenseCategories;
+
+    targetCategories.forEach((cat) => {
+      const sum = filteredTransactions
+        .filter((t) => t.type === 'expense' && t.category === cat.name)
+        .reduce((acc, t) => acc + t.amount, 0);
+      if (sum > 0) {
+        catTotals.push({ label: cat.name, amount: sum });
+      }
+    });
+
+    // Also include transactions whose category was deleted or unlisted
+    const otherSum = filteredTransactions
+      .filter((t) => t.type === 'expense' && !targetCategories.some((c) => c.name === t.category))
+      .reduce((acc, t) => acc + t.amount, 0);
+    if (otherSum > 0) {
+      catTotals.push({ label: t.catOthers || 'Otros', amount: otherSum });
     }
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const docs: Transaction[] = snapshot.docs.map((docSnap) => ({
-        id: docSnap.id,
-        ...docSnap.data()
-      } as Transaction));
-      
-      // Auto-recurring Bill generation check:
-      // If a recurring bill's date is in the past month and hasn't been created for the current month, we handle it seamlessly
-      docs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      setTransactions(docs);
-    });
+    return {
+      labels: catTotals.map((c) => c.label),
+      datasets: [
+        {
+          data: catTotals.map((c) => c.amount),
+          backgroundColor: CHART_COLORS.slice(0, catTotals.length),
+          borderWidth: 0
+        }
+      ]
+    };
+  }, [filteredTransactions, availableExpenseCategories, t]);
 
-    return () => unsubscribe();
-  }, [user, userProfile, scope]);
-
-  // Combined Categories List (Default + Custom)
-  const allCategoryNames = Array.from(new Set([
-    ...DEFAULT_CATEGORIES,
-    ...customCategories.map(c => c.name)
-  ]));
-
-  // Open modal for new transaction
-  const openNewTransactionModal = () => {
-    setEditingTransaction(null);
+  // --------------------------------------------------------------------------
+  // HANDLERS: Transactions
+  // --------------------------------------------------------------------------
+  const handleOpenTxModal = () => {
     setDescription('');
-    setAmountRaw('');
+    setAmount('');
     setType('expense');
-    setCategory(allCategoryNames[0] || 'Supermercado');
+    setAccountId(accounts[0]?.id || '');
     setTransactionScope(scope === 'personal' ? 'personal' : 'shared');
-    setDate(new Date().toISOString().split('T')[0]);
-    setAccountId(accounts.length > 0 ? accounts[0].id || '' : '');
-    setToAccountId('');
-    setIsModalOpen(true);
+    setIsTxModalOpen(true);
   };
 
-  // Open modal for editing existing transaction
-  const openEditTransactionModal = (tx: Transaction) => {
-    setEditingTransaction(tx);
-    setDescription(tx.description);
-    setAmountRaw(formatAmountInput(tx.amount.toString()));
-    setType(tx.type);
-    setCategory(tx.category || 'Otros');
-    setTransactionScope(tx.scope);
-    setDate(tx.date || new Date().toISOString().split('T')[0]);
-    setAccountId(tx.accountId || '');
-    setToAccountId(tx.toAccountId || '');
-    setIsModalOpen(true);
-  };
-
-  // Save (Create or Update) Transaction
   const handleSaveTransaction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !amountRaw || !description) return;
+    if (!user || !amount || !description) return;
 
-    const parsedAmount = getNumericAmount(amountRaw);
-    if (parsedAmount <= 0) return;
+    const selectedAcc = accounts.find((a) => a.id === accountId);
 
-    const sourceAcc = accounts.find(a => a.id === accountId);
-    const destAcc = accounts.find(a => a.id === toAccountId);
+    const newTx: Omit<Transaction, 'id'> = {
+      uid: user.uid,
+      coupleId: userProfile?.coupleId || null,
+      description: description.trim(),
+      amount: parseFloat(amount),
+      category: category || (type === 'expense' ? 'Otros' : 'Otros Ingresos'),
+      account: selectedAcc ? selectedAcc.name : '',
+      accountId: selectedAcc?.id || '',
+      type,
+      scope: transactionScope,
+      date: new Date().toISOString().split('T')[0],
+      createdAt: serverTimestamp()
+    };
 
-    if (type === 'transfer' && (!accountId || !toAccountId || accountId === toAccountId)) {
-      alert('Por favor selecciona una cuenta de origen y una cuenta de destino diferentes.');
-      return;
-    }
+    await addDoc(collection(db, 'transactions'), newTx);
 
-    if (editingTransaction && editingTransaction.id) {
-      // UPDATE existing transaction
-      const txRef = doc(db, 'transactions', editingTransaction.id);
-      await updateDoc(txRef, {
-        description,
-        amount: parsedAmount,
-        category: type === 'transfer' ? 'Transferencia' : category,
-        type,
-        scope: transactionScope,
-        date,
-        accountId: accountId || null,
-        accountName: sourceAcc ? sourceAcc.name : null,
-        toAccountId: type === 'transfer' ? (toAccountId || null) : null,
-        toAccountName: (type === 'transfer' && destAcc) ? destAcc.name : null,
-        isRecurringBill: type === 'bill',
-        frequency: type === 'bill' ? 'monthly' : null
-      });
-    } else {
-      // CREATE new transaction
-      const newTx: Omit<Transaction, 'id'> = {
-        uid: user.uid,
-        coupleId: userProfile?.coupleId || null,
-        description,
-        amount: parsedAmount,
-        category: type === 'transfer' ? 'Transferencia' : category,
-        type,
-        scope: transactionScope,
-        date,
-        accountId: accountId || null,
-        accountName: sourceAcc ? sourceAcc.name : null,
-        toAccountId: type === 'transfer' ? (toAccountId || null) : null,
-        toAccountName: (type === 'transfer' && destAcc) ? destAcc.name : null,
-        isRecurringBill: type === 'bill',
-        frequency: type === 'bill' ? 'monthly' : undefined,
-        createdAt: serverTimestamp()
-      };
-      await addDoc(collection(db, 'transactions'), newTx);
-    }
-
-    setIsModalOpen(false);
+    setDescription('');
+    setAmount('');
+    setIsTxModalOpen(false);
   };
 
-  // Delete Transaction
-  const handleDelete = async (id?: string) => {
+  const handleDeleteTransaction = async (id?: string) => {
     if (!id) return;
     await deleteDoc(doc(db, 'transactions', id));
   };
 
-  // Add Account
-  const handleAddAccount = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !newAccountName.trim()) return;
-
-    const newAcc: Omit<Account, 'id'> = {
-      uid: user.uid,
-      coupleId: userProfile?.coupleId || null,
-      name: newAccountName.trim(),
-      scope: newAccountScope,
-      createdAt: serverTimestamp()
-    };
-
-    await addDoc(collection(db, 'accounts'), newAcc);
-    setNewAccountName('');
+  // --------------------------------------------------------------------------
+  // HANDLERS: Accounts
+  // --------------------------------------------------------------------------
+  const handleOpenNewAccountModal = () => {
+    setEditingAccount(null);
+    setAccountName('');
+    setAccountType('bank');
+    setAccountInitialBalance('');
+    setAccountScope(scope === 'personal' ? 'personal' : 'shared');
+    setIsAccountModalOpen(true);
   };
 
-  // Delete Account
-  const handleDeleteAccount = async (id?: string) => {
-    if (!id) return;
-    await deleteDoc(doc(db, 'accounts', id));
-    if (selectedAccountId === id) {
-      setSelectedAccountId('all');
+  const handleEditAccount = (acc: Account) => {
+    setEditingAccount(acc);
+    setAccountName(acc.name);
+    setAccountType(acc.type);
+    setAccountInitialBalance(acc.initialBalance?.toString() || '0');
+    setAccountScope(acc.scope || 'personal');
+    setIsAccountModalOpen(true);
+  };
+
+  const handleSaveAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !accountName.trim()) return;
+
+    if (editingAccount?.id) {
+      await updateDoc(doc(db, 'accounts', editingAccount.id), {
+        name: accountName.trim(),
+        type: accountType,
+        initialBalance: parseFloat(accountInitialBalance) || 0,
+        scope: accountScope
+      });
+    } else {
+      await addDoc(collection(db, 'accounts'), {
+        uid: user.uid,
+        coupleId: userProfile?.coupleId || null,
+        name: accountName.trim(),
+        type: accountType,
+        initialBalance: parseFloat(accountInitialBalance) || 0,
+        scope: accountScope,
+        createdAt: serverTimestamp()
+      });
+    }
+
+    setIsAccountModalOpen(false);
+  };
+
+  const handleDeleteAccount = async (accId?: string) => {
+    if (!accId) return;
+    if (confirm('¿Seguro que deseas eliminar esta cuenta?')) {
+      await deleteDoc(doc(db, 'accounts', accId));
+      if (selectedAccountId === accId) {
+        setSelectedAccountId('all');
+      }
     }
   };
 
-  // Add Custom Category
-  const handleAddCategory = async (e: React.FormEvent) => {
+  const getAccountIcon = (accType: AccountType) => {
+    switch (accType) {
+      case 'bank':
+        return <Landmark className="w-4 h-4 text-blue-500" />;
+      case 'wallet':
+        return <Smartphone className="w-4 h-4 text-indigo-500" />;
+      case 'cash':
+        return <Coins className="w-4 h-4 text-amber-500" />;
+      case 'credit':
+        return <CreditCard className="w-4 h-4 text-purple-500" />;
+      case 'savings':
+        return <PiggyBank className="w-4 h-4 text-emerald-500" />;
+      case 'investment':
+        return <TrendingUp className="w-4 h-4 text-teal-500" />;
+      default:
+        return <Wallet className="w-4 h-4 text-slate-500" />;
+    }
+  };
+
+  // --------------------------------------------------------------------------
+  // HANDLERS: Categories
+  // --------------------------------------------------------------------------
+  const handleOpenCategoriesModal = () => {
+    setEditingCategory(null);
+    setNewCatName('');
+    setNewCatType(categoryTab);
+    setNewCatScope('shared');
+    setIsCategoryModalOpen(true);
+  };
+
+  const handleSaveCategory = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !newCatName.trim()) return;
 
-    const newCat: Omit<CategoryItem, 'id'> = {
-      uid: user.uid,
-      coupleId: userProfile?.coupleId || null,
-      name: newCatName.trim(),
-      scope: scope === 'personal' ? 'personal' : 'shared',
-      createdAt: serverTimestamp()
-    };
+    if (editingCategory?.id) {
+      await updateDoc(doc(db, 'categories', editingCategory.id), {
+        name: newCatName.trim(),
+        type: newCatType,
+        scope: newCatScope
+      });
+    } else {
+      await addDoc(collection(db, 'categories'), {
+        uid: user.uid,
+        coupleId: userProfile?.coupleId || null,
+        name: newCatName.trim(),
+        type: newCatType,
+        scope: newCatScope,
+        createdAt: serverTimestamp()
+      });
+    }
 
-    await addDoc(collection(db, 'categories'), newCat);
+    setEditingCategory(null);
     setNewCatName('');
   };
 
-  // Edit Custom Category
-  const handleUpdateCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingCategory || !editingCategory.id || !editCatName.trim()) return;
-
-    await updateDoc(doc(db, 'categories', editingCategory.id), {
-      name: editCatName.trim()
-    });
-    setEditingCategory(null);
-    setEditCatName('');
+  const handleStartEditCategory = (cat: CategoryItem) => {
+    setEditingCategory(cat);
+    setNewCatName(cat.name);
+    setNewCatType(cat.type);
+    setNewCatScope(cat.scope || 'shared');
   };
 
-  // Delete Custom Category
-  const handleDeleteCategory = async (id?: string) => {
-    if (!id) return;
-    await deleteDoc(doc(db, 'categories', id));
-  };
-
-  // Filter transactions by selected account
-  const filteredTransactions = transactions.filter(t => {
-    if (selectedAccountId === 'all') return true;
-    return t.accountId === selectedAccountId || t.toAccountId === selectedAccountId;
-  });
-
-  // Calculations
-  // Expenses include: 'expense' and 'bill'
-  // Income: 'income'
-  // Transfers: do not alter global net balance (money shifts accounts), but if filtered by account:
-  // - If account is source: deduction
-  // - If account is dest: addition
-  const totalIncome = filteredTransactions.reduce((acc, t) => {
-    if (t.type === 'income') return acc + t.amount;
-    if (selectedAccountId !== 'all' && t.type === 'transfer' && t.toAccountId === selectedAccountId) {
-      return acc + t.amount;
+  const handleDeleteCategory = async (catId?: string) => {
+    if (!catId) return;
+    if (confirm('¿Eliminar esta categoría? Las transacciones previas conservarán su registro.')) {
+      await deleteDoc(doc(db, 'categories', catId));
     }
-    return acc;
-  }, 0);
-
-  const totalExpense = filteredTransactions.reduce((acc, t) => {
-    if (t.type === 'expense' || t.type === 'bill') return acc + t.amount;
-    if (selectedAccountId !== 'all' && t.type === 'transfer' && t.accountId === selectedAccountId) {
-      return acc + t.amount;
-    }
-    return acc;
-  }, 0);
-
-  const totalTransfers = filteredTransactions.filter(t => t.type === 'transfer').reduce((acc, t) => acc + t.amount, 0);
-  const totalBills = filteredTransactions.filter(t => t.type === 'bill').reduce((acc, t) => acc + t.amount, 0);
-  const balance = totalIncome - totalExpense;
-
-  // Chart Data Preparation (includes expenses & bills)
-  const chartCategories = allCategoryNames.filter(cat => cat !== 'Transferencia');
-  const expensesByCategory = chartCategories.map(cat => {
-    return filteredTransactions
-      .filter(t => (t.type === 'expense' || t.type === 'bill') && t.category === cat)
-      .reduce((acc, t) => acc + t.amount, 0);
-  });
-
-  const chartColors = [
-    '#10b981', '#6366f1', '#f59e0b', '#ec4899', '#3b82f6', '#8b5cf6', '#14b8a6', '#f43f5e', '#64748b'
-  ];
-
-  const chartData = {
-    labels: chartCategories,
-    datasets: [
-      {
-        data: expensesByCategory,
-        backgroundColor: chartColors.slice(0, chartCategories.length),
-        borderWidth: 0,
-      },
-    ],
   };
 
   return (
     <div className="space-y-6">
       
-      {/* Header Actions */}
+      {/* Top Header Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-900 dark:text-white">{t.financialSummary}</h2>
-          <p className="text-xs text-slate-500">{t.financeSub}</p>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
+            {t.financialSummary}
+          </h2>
+          <p className="text-xs text-slate-500 dark:text-slate-400">
+            {t.financeSub}
+          </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+
+        <div className="flex items-center space-x-2 flex-wrap gap-y-2">
+          {/* Manage Categories Button */}
           <button
-            onClick={() => setIsCategoryModalOpen(true)}
-            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-xl text-xs transition-colors border border-slate-200 dark:border-slate-700"
+            onClick={handleOpenCategoriesModal}
+            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl transition-all"
+            title={t.manageCategories}
           >
-            <FolderPlus className="w-4 h-4 text-emerald-500" />
+            <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-500" />
             <span>{t.manageCategories}</span>
           </button>
 
+          {/* New Account Button */}
           <button
-            onClick={() => setIsAccountModalOpen(true)}
-            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium rounded-xl text-xs transition-colors border border-slate-200 dark:border-slate-700"
+            onClick={handleOpenNewAccountModal}
+            className="inline-flex items-center space-x-1.5 px-3 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl transition-all"
+            title={t.newAccount}
           >
-            <Building2 className="w-4 h-4 text-indigo-500" />
-            <span>{t.manageAccounts}</span>
+            <Wallet className="w-3.5 h-3.5 text-indigo-500" />
+            <span>{t.newAccount}</span>
           </button>
-          
+
+          {/* New Transaction Button */}
           <button
-            onClick={openNewTransactionModal}
-            className="inline-flex items-center space-x-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-medium rounded-xl text-xs transition-colors shadow-sm"
+            onClick={handleOpenTxModal}
+            className="inline-flex items-center space-x-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-xl text-xs transition-all shadow-md shadow-indigo-600/20"
           >
             <Plus className="w-4 h-4" />
             <span>{t.newTransaction}</span>
@@ -443,94 +534,136 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
         </div>
       </div>
 
-      {/* Account Filters Bar */}
-      {accounts.length > 0 && (
-        <div className="flex items-center space-x-2 overflow-x-auto pb-1 text-xs">
-          <span className="text-slate-400 font-medium flex items-center space-x-1 pr-1">
-            <Filter className="w-3 h-3" />
-            <span>{t.account}:</span>
+      {/* Accounts Carousel / Bar */}
+      <div className="space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+            {t.accounts}
           </span>
-          <button
-            onClick={() => setSelectedAccountId('all')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all ${
-              selectedAccountId === 'all'
-                ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
-            }`}
-          >
-            {t.allAccounts}
-          </button>
-          {accounts.map(acc => (
+          {accounts.length > 0 && (
             <button
-              key={acc.id}
-              onClick={() => setSelectedAccountId(acc.id || 'all')}
-              className={`px-3 py-1.5 rounded-lg whitespace-nowrap transition-all flex items-center space-x-1.5 ${
-                selectedAccountId === acc.id
-                  ? 'bg-indigo-600 text-white font-semibold shadow-sm'
-                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-slate-300'
+              onClick={() => setSelectedAccountId('all')}
+              className={`text-xs font-medium px-2 py-0.5 rounded-lg transition-colors ${
+                selectedAccountId === 'all'
+                  ? 'text-indigo-600 dark:text-indigo-400 font-bold'
+                  : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
               }`}
             >
-              <span>{acc.name}</span>
-              <span className={`text-[9px] uppercase px-1 py-0.2 rounded font-bold ${
-                acc.scope === 'shared' ? 'bg-indigo-100 dark:bg-indigo-950 text-indigo-700 dark:text-indigo-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
-              }`}>
-                {acc.scope === 'shared' ? 'C' : 'P'}
-              </span>
+              {t.allAccounts}
             </button>
-          ))}
+          )}
         </div>
-      )}
+
+        {accounts.length === 0 ? (
+          <div className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-indigo-950/20 border border-dashed border-indigo-200 dark:border-indigo-800 flex items-center justify-between">
+            <div className="flex items-center space-x-3 text-xs text-indigo-700 dark:text-indigo-300">
+              <AlertCircle className="w-4 h-4 shrink-0 text-indigo-500" />
+              <span>{t.noAccounts}</span>
+            </div>
+            <button
+              onClick={handleOpenNewAccountModal}
+              className="inline-flex items-center space-x-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 transition-colors shrink-0 ml-2"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>{t.newAccount}</span>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center space-x-3 overflow-x-auto pb-2 pt-1 scrollbar-none">
+            {accounts.map((acc) => {
+              const bal = accountBalances[acc.id || ''] ?? acc.initialBalance;
+              const isSelected = selectedAccountId === acc.id;
+              return (
+                <div
+                  key={acc.id}
+                  onClick={() => setSelectedAccountId(isSelected ? 'all' : (acc.id || 'all'))}
+                  className={`relative shrink-0 w-44 p-3.5 rounded-2xl border transition-all cursor-pointer select-none group ${
+                    isSelected
+                      ? 'bg-indigo-50 dark:bg-indigo-950/60 border-indigo-300 dark:border-indigo-700 shadow-sm'
+                      : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <div className="flex items-center space-x-2">
+                      <div className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800">
+                        {getAccountIcon(acc.type)}
+                      </div>
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200 truncate max-w-[80px]">
+                        {acc.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEditAccount(acc);
+                        }}
+                        className="p-1 text-slate-400 hover:text-indigo-600 transition-colors"
+                        title={t.edit}
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteAccount(acc.id);
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-500 transition-colors"
+                        title={t.delete}
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <p className={`text-base font-bold ${bal >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-500'}`}>
+                    ${bal.toLocaleString()}
+                  </p>
+                  <span className="text-[10px] text-slate-400 uppercase font-medium">
+                    {acc.scope === 'shared' ? t.shared : t.personal}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {/* Financial Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         
-        {/* Balance */}
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between text-slate-500 mb-2">
             <span className="text-xs font-semibold uppercase tracking-wider">{t.totalBalance}</span>
             <Wallet className="w-4 h-4 text-indigo-500" />
           </div>
-          <p className={`text-2xl font-extrabold ${balance >= 0 ? 'text-slate-900 dark:text-white' : 'text-red-500'}`}>
-            ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <p className={`text-2xl font-extrabold ${totalBalance >= 0 ? 'text-slate-900 dark:text-white' : 'text-rose-500'}`}>
+            ${totalBalance.toLocaleString()}
           </p>
         </div>
 
-        {/* Ingresos */}
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600">{t.income}</span>
+            <span className="text-xs font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+              {t.income}
+            </span>
             <TrendingUp className="w-4 h-4 text-emerald-500" />
           </div>
           <p className="text-2xl font-extrabold text-emerald-600 dark:text-emerald-400">
-            +${totalIncome.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            +${totalIncome.toLocaleString()}
           </p>
         </div>
 
-        {/* Gastos Totales */}
         <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
           <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-red-500">{t.expenses}</span>
-            <TrendingDown className="w-4 h-4 text-red-500" />
-          </div>
-          <p className="text-2xl font-extrabold text-red-500">
-            -${totalExpense.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </p>
-        </div>
-
-        {/* Facturas & Transferencias */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <div className="flex items-center justify-between text-slate-500 mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-amber-500">{t.bills}</span>
-            <Receipt className="w-4 h-4 text-amber-500" />
-          </div>
-          <div className="flex items-baseline justify-between">
-            <p className="text-2xl font-extrabold text-amber-600 dark:text-amber-400">
-              ${totalBills.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </p>
-            <span className="text-[11px] text-slate-400 font-medium">
-              ⇄ ${totalTransfers.toLocaleString()}
+            <span className="text-xs font-semibold uppercase tracking-wider text-rose-500">
+              {t.expenses}
             </span>
+            <TrendingDown className="w-4 h-4 text-rose-500" />
           </div>
+          <p className="text-2xl font-extrabold text-rose-500">
+            -${totalExpense.toLocaleString()}
+          </p>
         </div>
 
       </div>
@@ -543,7 +676,7 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
           <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4 self-start">
             {t.byCategory}
           </h3>
-          {totalExpense > 0 ? (
+          {totalExpense > 0 && chartData.labels.length > 0 ? (
             <div className="w-48 h-48">
               <Doughnut data={chartData} options={{ maintainAspectRatio: true, plugins: { legend: { display: false } } }} />
             </div>
@@ -556,9 +689,16 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
 
         {/* Transactions Table / List */}
         <div className="lg:col-span-2 p-6 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">
-          <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-4">
-            {t.movementHistory}
-          </h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+              {t.movementHistory}
+            </h3>
+            {selectedAccountId !== 'all' && (
+              <span className="text-xs px-2 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 font-medium">
+                Filtrado por cuenta
+              </span>
+            )}
+          </div>
 
           {filteredTransactions.length === 0 ? (
             <div className="py-12 text-center text-sm text-slate-400">
@@ -566,175 +706,93 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
             </div>
           ) : (
             <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
-              {filteredTransactions.map((tx) => {
-                const isTransfer = tx.type === 'transfer';
-                const isBill = tx.type === 'bill';
-                const isIncome = tx.type === 'income';
-
-                return (
-                  <div
-                    key={tx.id}
-                    className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-all"
-                  >
-                    <div className="flex items-center space-x-3">
-                      <div className={`p-2.5 rounded-lg ${
-                        isIncome ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600' :
-                        isTransfer ? 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-500' :
-                        isBill ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-500' :
-                        'bg-red-50 dark:bg-red-950/40 text-red-500'
-                      }`}>
-                        {isIncome && <TrendingUp className="w-4 h-4" />}
-                        {isTransfer && <ArrowRightLeft className="w-4 h-4" />}
-                        {isBill && <Repeat className="w-4 h-4" />}
-                        {!isIncome && !isTransfer && !isBill && <TrendingDown className="w-4 h-4" />}
-                      </div>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <h4 className="text-sm font-semibold text-slate-900 dark:text-white leading-none">
-                            {tx.description}
-                          </h4>
-                          {isBill && (
-                            <span className="text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 font-bold px-1.5 py-0.2 rounded">
-                              Mensual
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400 mt-1">
-                          {isTransfer ? (
-                            <span className="inline-flex items-center space-x-1 font-medium text-indigo-600 dark:text-indigo-400">
-                              <span>{tx.accountName || 'Origen'}</span>
-                              <span>➔</span>
-                              <span>{tx.toAccountName || 'Destino'}</span>
-                            </span>
-                          ) : (
-                            <>
-                              <span className="inline-flex items-center space-x-1">
-                                <Tag className="w-3 h-3" />
-                                <span>{tx.category}</span>
-                              </span>
-                              {tx.accountName && (
-                                <>
-                                  <span>•</span>
-                                  <span className="inline-flex items-center space-x-1 text-slate-500 dark:text-slate-400">
-                                    <Building2 className="w-3 h-3" />
-                                    <span>{tx.accountName}</span>
-                                  </span>
-                                </>
-                              )}
-                            </>
-                          )}
-                          <span>•</span>
-                          <span className="inline-flex items-center space-x-1">
-                            <Calendar className="w-3 h-3 text-indigo-400" />
-                            <span className="font-medium text-slate-600 dark:text-slate-300">{tx.date}</span>
-                          </span>
-                          <span>•</span>
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] uppercase font-bold ${tx.scope === 'shared' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
-                            {tx.scope === 'shared' ? t.shared : t.personal}
-                          </span>
-                        </div>
-                      </div>
+              {filteredTransactions.map((tx) => (
+                <div
+                  key={tx.id}
+                  className="flex items-center justify-between p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-all"
+                >
+                  <div className="flex items-center space-x-3">
+                    <div className={`p-2.5 rounded-lg ${tx.type === 'income' ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600' : 'bg-rose-50 dark:bg-rose-950/40 text-rose-500'}`}>
+                      {tx.type === 'income' ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
                     </div>
-
-                    <div className="flex items-center space-x-2">
-                      <span className={`text-sm font-bold pr-1 ${
-                        isIncome ? 'text-emerald-600 dark:text-emerald-400' :
-                        isTransfer ? 'text-indigo-600 dark:text-indigo-400' :
-                        isBill ? 'text-amber-600 dark:text-amber-400' :
-                        'text-slate-900 dark:text-white'
-                      }`}>
-                        {isIncome ? '+' : isTransfer ? '⇄ ' : '-'}${tx.amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </span>
-                      <button
-                        onClick={() => openEditTransactionModal(tx)}
-                        className="text-slate-400 hover:text-indigo-600 p-1.5 transition-colors rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"
-                        title={t.edit}
-                      >
-                        <Edit3 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDelete(tx.id)}
-                        className="text-slate-400 hover:text-red-500 p-1.5 transition-colors rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700"
-                        title={t.delete}
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                    <div>
+                      <h4 className="text-sm font-semibold text-slate-900 dark:text-white leading-none">
+                        {tx.description}
+                      </h4>
+                      <div className="flex items-center space-x-2 text-xs text-slate-400 mt-1 flex-wrap gap-y-1">
+                        <span className="inline-flex items-center space-x-1">
+                          <Tag className="w-3 h-3 text-indigo-500" />
+                          <span>{tx.category}</span>
+                        </span>
+                        {tx.account && (
+                          <>
+                            <span>•</span>
+                            <span className="inline-flex items-center space-x-1">
+                              <Wallet className="w-3 h-3 text-slate-400" />
+                              <span>{tx.account}</span>
+                            </span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span className="inline-flex items-center space-x-1">
+                          <Calendar className="w-3 h-3" />
+                          <span>{tx.date}</span>
+                        </span>
+                        <span>•</span>
+                        <span className={`px-1.5 py-0.2 rounded text-[10px] uppercase font-bold ${tx.scope === 'shared' ? 'bg-indigo-50 text-indigo-600 dark:bg-indigo-950/40 dark:text-indigo-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'}`}>
+                          {tx.scope === 'shared' ? t.shared : t.personal}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="flex items-center space-x-3">
+                    <span className={`text-sm font-bold ${tx.type === 'income' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-white'}`}>
+                      {tx.type === 'income' ? '+' : '-'}${tx.amount.toLocaleString()}
+                    </span>
+                    <button
+                      onClick={() => handleDeleteTransaction(tx.id)}
+                      className="text-slate-400 hover:text-rose-500 p-1 transition-colors"
+                      title={t.delete}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
 
       </div>
 
-      {/* Modal: Crear o Editar Transacción */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
-            <h3 className="text-lg font-bold text-slate-900 dark:text-white">
-              {editingTransaction ? t.editTransaction : t.newTransaction}
-            </h3>
+      {/* ======================================================================
+          MODAL: NUEVA TRANSACCIÓN
+      ====================================================================== */}
+      {isTxModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {t.newTransaction}
+              </h3>
+              <button
+                onClick={() => setIsTxModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             
             <form onSubmit={handleSaveTransaction} className="space-y-4">
-              {/* Type Selection */}
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.type}</label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => setType('expense')}
-                    className={`py-2 px-1 text-center rounded-xl text-xs font-medium border transition-all ${
-                      type === 'expense'
-                        ? 'bg-red-50 dark:bg-red-950/40 border-red-500 text-red-600 dark:text-red-400 font-bold'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    Gasto (-)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setType('income')}
-                    className={`py-2 px-1 text-center rounded-xl text-xs font-medium border transition-all ${
-                      type === 'income'
-                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    Ingreso (+)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setType('transfer')}
-                    className={`py-2 px-1 text-center rounded-xl text-xs font-medium border transition-all ${
-                      type === 'transfer'
-                        ? 'bg-indigo-50 dark:bg-indigo-950/40 border-indigo-500 text-indigo-600 dark:text-indigo-400 font-bold'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    Transf. (⇄)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setType('bill')}
-                    className={`py-2 px-1 text-center rounded-xl text-xs font-medium border transition-all ${
-                      type === 'bill'
-                        ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-500 text-amber-600 dark:text-amber-400 font-bold'
-                        : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
-                    }`}
-                  >
-                    Factura (📅)
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.description}</label>
+                <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                  {t.description}
+                </label>
                 <input
                   type="text"
                   required
-                  placeholder={type === 'transfer' ? 'Ej: Transferencia ahorros' : type === 'bill' ? 'Ej: Factura de Electricidad' : 'Ej: Mercado semanal'}
+                  placeholder="Ej: Mercado semanal, Pago de nómina..."
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
@@ -743,123 +801,131 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.amount} ($)</label>
+                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    {t.amount} ($)
+                  </label>
                   <input
-                    type="text"
+                    type="number"
                     required
+                    step="0.01"
                     placeholder="0.00"
-                    value={amountRaw}
-                    onChange={handleAmountChange}
-                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white tracking-wider"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.date}</label>
-                  <input
-                    type="date"
-                    required
-                    value={date}
-                    onChange={(e) => setDate(e.target.value)}
+                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    {t.type}
+                  </label>
+                  <select
+                    value={type}
+                    onChange={(e) => setType(e.target.value as TransactionType)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
-                  />
+                  >
+                    <option value="expense">{t.expenseType}</option>
+                    <option value="income">{t.incomeType}</option>
+                  </select>
                 </div>
               </div>
 
-              {/* Accounts Selection based on Type */}
-              {type === 'transfer' ? (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.sourceAccount}</label>
-                    <select
-                      required
-                      value={accountId}
-                      onChange={(e) => setAccountId(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none text-slate-900 dark:text-white"
-                    >
-                      <option value="">{t.selectAccount}</option>
-                      {accounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.name} ({acc.scope === 'shared' ? t.shared : t.personal})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.destAccount}</label>
-                    <select
-                      required
-                      value={toAccountId}
-                      onChange={(e) => setToAccountId(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none text-slate-900 dark:text-white"
-                    >
-                      <option value="">{t.selectDestAccount}</option>
-                      {accounts.filter(a => a.id !== accountId).map(acc => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.name} ({acc.scope === 'shared' ? t.shared : t.personal})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.account}</label>
-                    <select
-                      value={accountId}
-                      onChange={(e) => setAccountId(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none text-slate-900 dark:text-white"
-                    >
-                      <option value="">{t.selectAccount}</option>
-                      {accounts.map(acc => (
-                        <option key={acc.id} value={acc.id}>
-                          {acc.name} ({acc.scope === 'shared' ? t.shared : t.personal})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.category}</label>
-                    <select
-                      value={category}
-                      onChange={(e) => setCategory(e.target.value)}
-                      className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none text-slate-900 dark:text-white"
-                    >
-                      {allCategoryNames.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                    </select>
-                  </div>
-                </div>
-              )}
-
-              {/* Scope */}
+              {/* Category selector & quick add */}
               <div>
-                <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">{t.scope}</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold uppercase text-slate-500">
+                    {t.category} ({type === 'expense' ? 'Gasto' : 'Ingreso'})
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsTxModalOpen(false);
+                      setCategoryTab(type);
+                      handleOpenCategoriesModal();
+                    }}
+                    className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                  >
+                    + {t.newCategory}
+                  </button>
+                </div>
                 <select
-                  value={transactionScope}
-                  onChange={(e) => setTransactionScope(e.target.value as TransactionScope)}
-                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none text-slate-900 dark:text-white"
+                  value={category}
+                  onChange={(e) => setCategory(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
                 >
-                  <option value="shared">{t.shared}</option>
-                  <option value="personal">{t.personal}</option>
+                  {currentCategoriesForTx.map((cat) => (
+                    <option key={cat.id || cat.name} value={cat.name}>
+                      {cat.name}
+                    </option>
+                  ))}
+                  {currentCategoriesForTx.length === 0 && (
+                    <option value="General">General</option>
+                  )}
                 </select>
               </div>
 
-              <div className="flex items-center justify-end space-x-2 pt-4">
+              {/* Account & Scope */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="block text-xs font-semibold uppercase text-slate-500">
+                      {t.selectAccount}
+                    </label>
+                    {accounts.length === 0 && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTxModalOpen(false);
+                          handleOpenNewAccountModal();
+                        }}
+                        className="text-[11px] text-indigo-600 dark:text-indigo-400 hover:underline font-semibold"
+                      >
+                        + Crear
+                      </button>
+                    )}
+                  </div>
+                  <select
+                    value={accountId}
+                    onChange={(e) => setAccountId(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
+                  >
+                    <option value="">Sin cuenta asignada</option>
+                    {accounts.map((acc) => (
+                      <option key={acc.id} value={acc.id}>
+                        {acc.name} (${(accountBalances[acc.id || ''] ?? acc.initialBalance).toLocaleString()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    {t.scope}
+                  </label>
+                  <select
+                    value={transactionScope}
+                    onChange={(e) => setTransactionScope(e.target.value as TransactionScope)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
+                  >
+                    <option value="shared">{t.shared}</option>
+                    <option value="personal">{t.personal}</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setIsModalOpen(false)}
+                  onClick={() => setIsTxModalOpen(false)}
                   className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
                 >
                   {t.cancel}
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-xs shadow-sm"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-xl text-xs shadow-md shadow-indigo-600/20"
                 >
-                  {editingTransaction ? t.updateTransaction : t.saveTransaction}
+                  {t.saveTransaction}
                 </button>
               </div>
             </form>
@@ -867,226 +933,249 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
         </div>
       )}
 
-      {/* Modal: Gestión de Categorías */}
-      {isCategoryModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-emerald-600 dark:text-emerald-400">
-                <FolderPlus className="w-5 h-5" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.manageCategories}</h3>
-              </div>
-              <button
-                onClick={() => {
-                  setIsCategoryModalOpen(false);
-                  setEditingCategory(null);
-                }}
-                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Crear o Editar Categoría Form */}
-            {editingCategory ? (
-              <form onSubmit={handleUpdateCategory} className="space-y-3 bg-emerald-50/50 dark:bg-emerald-950/20 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800/60">
-                <h4 className="text-xs font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">{t.editCategory}</h4>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    required
-                    value={editCatName}
-                    onChange={(e) => setEditCatName(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none text-slate-900 dark:text-white"
-                  />
-                  <button
-                    type="submit"
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl text-xs transition-colors"
-                  >
-                    {t.saveCategory}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingCategory(null)}
-                    className="px-2.5 py-1.5 bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-xl text-xs"
-                  >
-                    {t.cancel}
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleAddCategory} className="space-y-3 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80">
-                <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{t.newCategory}</h4>
-                <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    required
-                    placeholder={t.categoryName}
-                    value={newCatName}
-                    onChange={(e) => setNewCatName(e.target.value)}
-                    className="flex-1 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none text-slate-900 dark:text-white"
-                  />
-                  <button
-                    type="submit"
-                    className="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-xl text-xs transition-colors whitespace-nowrap"
-                  >
-                    {t.addCategory}
-                  </button>
-                </div>
-              </form>
-            )}
-
-            {/* Lista de Categorías */}
-            <div className="space-y-2 max-h-52 overflow-y-auto">
-              {/* Default categories notice */}
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pb-1">Categorías de Sistema</div>
-              <div className="flex flex-wrap gap-1.5 pb-2 border-b border-slate-100 dark:border-slate-800">
-                {DEFAULT_CATEGORIES.map(cat => (
-                  <span key={cat} className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-medium">
-                    {cat}
-                  </span>
-                ))}
-              </div>
-
-              <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider pt-2">Tus Categorías Personalizadas</div>
-              {customCategories.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-2">No has agregado categorías personalizadas aún.</p>
-              ) : (
-                customCategories.map(cat => (
-                  <div
-                    key={cat.id}
-                    className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <Tag className="w-4 h-4 text-emerald-500" />
-                      <span className="text-xs font-semibold text-slate-900 dark:text-white">{cat.name}</span>
-                    </div>
-                    <div className="flex items-center space-x-1">
-                      <button
-                        onClick={() => {
-                          setEditingCategory(cat);
-                          setEditCatName(cat.name);
-                        }}
-                        className="text-slate-400 hover:text-indigo-600 p-1 transition-colors"
-                        title={t.edit}
-                      >
-                        <Edit3 className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCategory(cat.id)}
-                        className="text-slate-400 hover:text-red-500 p-1 transition-colors"
-                        title={t.delete}
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="text-right pt-2 border-t border-slate-100 dark:border-slate-800">
-              <button
-                type="button"
-                onClick={() => {
-                  setIsCategoryModalOpen(false);
-                  setEditingCategory(null);
-                }}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-xl transition-colors"
-              >
-                Cerrar
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Modal: Gestión de Cuentas / Bancos */}
+      {/* ======================================================================
+          MODAL: GESTIÓN DE CUENTAS
+      ====================================================================== */}
       {isAccountModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm">
-          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-xl space-y-5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-indigo-600 dark:text-indigo-400">
-                <Building2 className="w-5 h-5" />
-                <h3 className="text-base font-bold text-slate-900 dark:text-white">{t.manageAccounts}</h3>
-              </div>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {editingAccount ? t.editAccount : t.newAccount}
+              </h3>
               <button
                 onClick={() => setIsAccountModalOpen(false)}
-                className="text-xs text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Crear Cuenta Form */}
-            <form onSubmit={handleAddAccount} className="space-y-3 bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700/80">
-              <h4 className="text-xs font-semibold text-slate-700 dark:text-slate-300 uppercase tracking-wider">{t.newAccount}</h4>
-              <input
-                type="text"
-                required
-                placeholder={t.accountName}
-                value={newAccountName}
-                onChange={(e) => setNewAccountName(e.target.value)}
-                className="w-full px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
-              />
-              <div className="flex space-x-2">
+            <form onSubmit={handleSaveAccount} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                  {t.accountName}
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="Ej: Bancolombia, Nequi, Efectivo, Tarjeta Visa..."
+                  value={accountName}
+                  onChange={(e) => setAccountName(e.target.value)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    {t.accountType}
+                  </label>
+                  <select
+                    value={accountType}
+                    onChange={(e) => setAccountType(e.target.value as AccountType)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
+                  >
+                    <option value="bank">{t.bankAccount}</option>
+                    <option value="wallet">{t.digitalWallet}</option>
+                    <option value="cash">{t.cash}</option>
+                    <option value="credit">{t.creditCard}</option>
+                    <option value="savings">{t.savingsAccount}</option>
+                    <option value="investment">{t.investment}</option>
+                    <option value="other">{t.otherAccount}</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                    {t.initialBalance} ($)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={accountInitialBalance}
+                    onChange={(e) => setAccountInitialBalance(e.target.value)}
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold uppercase text-slate-500 mb-1">
+                  {t.scope}
+                </label>
                 <select
-                  value={newAccountScope}
-                  onChange={(e) => setNewAccountScope(e.target.value as TransactionScope)}
-                  className="flex-1 px-3 py-1.5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs focus:outline-none text-slate-900 dark:text-white"
+                  value={accountScope}
+                  onChange={(e) => setAccountScope(e.target.value as TransactionScope)}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
                 >
                   <option value="personal">{t.personal}</option>
                   <option value="shared">{t.shared}</option>
                 </select>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setIsAccountModalOpen(false)}
+                  className="px-4 py-2 text-xs font-semibold text-slate-500 hover:text-slate-700 dark:hover:text-slate-300"
+                >
+                  {t.cancel}
+                </button>
                 <button
                   type="submit"
-                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl text-xs transition-colors"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white font-semibold rounded-xl text-xs shadow-md shadow-indigo-600/20"
                 >
-                  {t.addAccount}
+                  {editingAccount ? t.saveChanges : t.create}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
 
-            {/* Lista de Cuentas */}
-            <div className="space-y-2 max-h-52 overflow-y-auto">
-              {accounts.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4">{t.noAccountsYet}</p>
-              ) : (
-                accounts.map(acc => (
-                  <div
-                    key={acc.id}
-                    className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700/80"
+      {/* ======================================================================
+          MODAL: GESTIÓN DE CATEGORÍAS (GASTOS E INGRESOS)
+      ====================================================================== */}
+      {isCategoryModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 shadow-2xl max-h-[90vh] flex flex-col">
+            
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <h3 className="text-lg font-bold text-slate-900 dark:text-white">
+                {t.manageCategories}
+              </h3>
+              <button
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Tab Selector: Gastos vs Ingresos */}
+            <div className="flex items-center space-x-2 my-4 p-1 bg-slate-100 dark:bg-slate-800/70 rounded-xl">
+              <button
+                onClick={() => {
+                  setCategoryTab('expense');
+                  setNewCatType('expense');
+                  setEditingCategory(null);
+                  setNewCatName('');
+                }}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  categoryTab === 'expense'
+                    ? 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                {t.expenseCategories} ({availableExpenseCategories.length})
+              </button>
+              <button
+                onClick={() => {
+                  setCategoryTab('income');
+                  setNewCatType('income');
+                  setEditingCategory(null);
+                  setNewCatName('');
+                }}
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                  categoryTab === 'income'
+                    ? 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                    : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+                }`}
+              >
+                {t.incomeCategories} ({availableIncomeCategories.length})
+              </button>
+            </div>
+
+            {/* Add or Edit Category Form */}
+            <form onSubmit={handleSaveCategory} className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-3 mb-4">
+              <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {editingCategory ? `${t.editCategory}: "${editingCategory.name}"` : `+ ${t.newCategory}`}
+              </div>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  required
+                  placeholder={`Ej: ${categoryTab === 'expense' ? 'Mascotas, Gimnasio...' : 'Ventas, Alquiler...'}`}
+                  value={newCatName}
+                  onChange={(e) => setNewCatName(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/20 text-slate-900 dark:text-white"
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 text-white text-xs font-semibold rounded-xl transition-colors shadow-sm shrink-0 flex items-center space-x-1"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{editingCategory ? t.saveChanges : t.create}</span>
+                </button>
+                {editingCategory && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingCategory(null);
+                      setNewCatName('');
+                    }}
+                    className="p-2 text-slate-400 hover:text-slate-600 rounded-xl border border-slate-200 dark:border-slate-700"
                   >
-                    <div className="flex items-center space-x-2">
-                      <Building2 className="w-4 h-4 text-slate-400" />
-                      <span className="text-xs font-semibold text-slate-900 dark:text-white">{acc.name}</span>
-                      <span className={`text-[10px] uppercase font-bold px-1.5 py-0.5 rounded ${
-                        acc.scope === 'shared' ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950 dark:text-indigo-400' : 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
-                      }`}>
-                        {acc.scope === 'shared' ? t.shared : t.personal}
-                      </span>
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+            </form>
+
+            {/* List of existing categories */}
+            <div className="overflow-y-auto flex-1 space-y-2 pr-1">
+              {(categoryTab === 'expense' ? availableExpenseCategories : availableIncomeCategories).map((cat) => (
+                <div
+                  key={cat.id || cat.name}
+                  className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800 hover:border-slate-200 dark:hover:border-slate-700 transition-all"
+                >
+                  <div className="flex items-center space-x-2.5">
+                    <div className={`p-1.5 rounded-lg ${cat.type === 'expense' ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-500' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-500'}`}>
+                      <Tag className="w-3.5 h-3.5" />
                     </div>
+                    <span className="text-sm font-semibold text-slate-800 dark:text-slate-200">
+                      {cat.name}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-1">
                     <button
-                      onClick={() => handleDeleteAccount(acc.id)}
-                      className="text-slate-400 hover:text-red-500 p-1 transition-colors"
+                      onClick={() => handleStartEditCategory(cat)}
+                      className="p-1.5 text-slate-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"
+                      title={t.edit}
+                    >
+                      <Edit2 className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteCategory(cat.id)}
+                      className="p-1.5 text-slate-400 hover:text-rose-500 transition-colors"
                       title={t.delete}
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                ))
+                </div>
+              ))}
+
+              {(categoryTab === 'expense' ? availableExpenseCategories : availableIncomeCategories).length === 0 && (
+                <div className="py-8 text-center text-xs text-slate-400">
+                  {t.noCategories}
+                </div>
               )}
             </div>
 
-            <div className="text-right pt-2 border-t border-slate-100 dark:border-slate-800">
+            <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex justify-end">
               <button
                 type="button"
-                onClick={() => setIsAccountModalOpen(false)}
-                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-xs font-medium rounded-xl transition-colors"
+                onClick={() => setIsCategoryModalOpen(false)}
+                className="px-4 py-2 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl hover:bg-slate-200 dark:hover:bg-slate-700 transition-colors"
               >
                 Cerrar
               </button>
             </div>
+
           </div>
         </div>
       )}
@@ -1094,3 +1183,4 @@ export const FinanceDashboard: React.FC<FinanceDashboardProps> = ({ scope }) => 
     </div>
   );
 };
+
