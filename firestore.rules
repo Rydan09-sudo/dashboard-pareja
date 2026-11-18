@@ -1,0 +1,484 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId} (matches Firebase Auth UID)
+// Fields:
+//   - uid: string (required, immutable, 1-128 chars) - user's auth UID
+//   - email: string (required, immutable, valid email format, max 100 chars)
+//   - displayName: string (optional, 1-50 chars)
+//   - coupleCode: string (required, immutable, 6 alphanumeric uppercase chars)
+//   - coupleId: string | null (optional, max 100 chars, couple ID reference)
+//   - language: string (optional, allowed: 'es', 'en', 'pt')
+//   - theme: string (optional, allowed: 'light', 'dark', 'system')
+//   - createdAt: timestamp (optional, immutable)
+//
+// Collection: couples
+// Document ID: {coupleId}
+// Fields:
+//   - partner1: string (required, immutable, user UID)
+//   - partner2: string (required, immutable, user UID, != partner1)
+//   - createdAt: timestamp (optional, immutable)
+//
+// Collection: transactions
+// Document ID: {transactionId}
+// Fields:
+//   - uid: string (required, immutable creator UID)
+//   - coupleId: string | null (optional, reference to couples collection)
+//   - description: string (required, 1-200 chars)
+//   - amount: number (required, >= 0, <= 1,000,000,000)
+//   - category: string (required, 1-50 chars)
+//   - categoryId: string (optional, max 100 chars)
+//   - account: string (optional, max 50 chars)
+//   - accountId: string (optional, max 100 chars)
+//   - type: string (required, 'expense' | 'income')
+//   - scope: string (required, 'personal' | 'shared')
+//   - date: string (required, YYYY-MM-DD format)
+//   - createdAt: timestamp (optional, immutable)
+//
+// Collection: accounts
+// Document ID: {accountId}
+// Fields:
+//   - uid: string (required, immutable creator UID)
+//   - coupleId: string | null (optional)
+//   - name: string (required, 1-50 chars)
+//   - type: string (required, 'bank'|'wallet'|'cash'|'credit'|'savings'|'investment'|'other')
+//   - initialBalance: number (required, -1,000,000,000 to 1,000,000,000)
+//   - color: string (optional, max 30 chars)
+//   - scope: string (required, 'personal' | 'shared')
+//   - createdAt: timestamp (optional, immutable)
+//
+// Collection: categories
+// Document ID: {categoryId}
+// Fields:
+//   - uid: string (required, immutable creator UID)
+//   - coupleId: string | null (optional)
+//   - name: string (required, 1-50 chars)
+//   - type: string (required, 'expense' | 'income')
+//   - color: string (optional, max 30 chars)
+//   - scope: string (required, 'personal' | 'shared')
+//   - createdAt: timestamp (optional, immutable)
+//
+// Collection: habits
+// Document ID: {habitId}
+// Fields:
+//   - uid: string (required, immutable creator UID)
+//   - coupleId: string | null (optional)
+//   - name: string (required, 1-100 chars)
+//   - streak: int (required, >= 0, <= 100,000)
+//   - completedDates: list (required, list of date strings, max size 1000)
+//   - scope: string (required, 'personal' | 'shared')
+//   - createdAt: timestamp (optional, immutable)
+//
+// Collection: tasks
+// Document ID: {taskId}
+// Fields:
+//   - uid: string (required, immutable creator UID)
+//   - coupleId: string | null (optional)
+//   - title: string (required, 1-200 chars)
+//   - completed: bool (required)
+//   - assignedTo: string (optional, max 128 chars)
+//   - scope: string (required, 'personal' | 'shared')
+//   - createdAt: timestamp (optional, immutable)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Global Helper Functions
+    // ===============================================================
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && resource.data.uid == request.auth.uid;
+    }
+
+    // Checks if the user is a registered partner of the given couple
+    function isMemberOfCouple(coupleId) {
+      return isAuthenticated() &&
+        coupleId is string &&
+        exists(/databases/$(database)/documents/couples/$(coupleId)) &&
+        (
+          get(/databases/$(database)/documents/couples/$(coupleId)).data.partner1 == request.auth.uid ||
+          get(/databases/$(database)/documents/couples/$(coupleId)).data.partner2 == request.auth.uid
+        );
+    }
+
+    // Checks if a specific UID is partner1 or partner2 of the given couple
+    function isCouplePartner(coupleId, uid) {
+      return exists(/databases/$(database)/documents/couples/$(coupleId)) &&
+        (
+          get(/databases/$(database)/documents/couples/$(coupleId)).data.partner1 == uid ||
+          get(/databases/$(database)/documents/couples/$(coupleId)).data.partner2 == uid
+        );
+    }
+
+    // Authorizes read/write access to shared or personal resources
+    function canAccessSharedResource() {
+      return isAuthenticated() && (
+        resource.data.uid == request.auth.uid ||
+        (
+          ('coupleId' in resource.data) &&
+          resource.data.coupleId != null &&
+          isMemberOfCouple(resource.data.coupleId)
+        )
+      );
+    }
+
+    // Verifies that a resource's coupleId and scope are consistent
+    function isValidScopeAndCouple(data) {
+      return data.scope in ['personal', 'shared'] && (
+        !('coupleId' in data) ||
+        data.coupleId == null ||
+        isMemberOfCouple(data.coupleId)
+      );
+    }
+
+    // Schema validation helpers
+    function hasRequiredFields(data, fields) {
+      return data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(data, fields) {
+      return data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string &&
+        email.size() <= 100 &&
+        email.matches('^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$');
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string &&
+        dateStr.matches('^\\d{4}-\\d{2}-\\d{2}$');
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return hasOnlyAllowedFields(data, ['uid', 'email', 'displayName', 'coupleCode', 'coupleId', 'language', 'theme', 'createdAt']) &&
+        hasRequiredFields(data, ['uid', 'email', 'coupleCode']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        isValidEmail(data.email) &&
+        data.coupleCode is string && data.coupleCode.matches('^[A-Z0-9]{4,10}$') &&
+        (!('displayName' in data) || (data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 50)) &&
+        (!('coupleId' in data) || data.coupleId == null || (data.coupleId is string && data.coupleId.size() <= 100)) &&
+        (!('language' in data) || data.language in ['es', 'en', 'pt']) &&
+        (!('theme' in data) || data.theme in ['light', 'dark', 'system']) &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function canUpdateSelf(userId) {
+      return isOwner(userId) &&
+        isValidUser(request.resource.data) &&
+        areImmutableFieldsUnchanged(['uid', 'email', 'coupleCode', 'createdAt']) &&
+        (
+          !request.resource.data.diff(resource.data).affectedKeys().hasAny(['coupleId']) ||
+          request.resource.data.coupleId == null ||
+          (request.resource.data.coupleId is string && isMemberOfCouple(request.resource.data.coupleId))
+        );
+    }
+
+    // Allows linking a partner only if partner's coupleId is currently null,
+    // only modifying coupleId, and authenticated caller is member of that newly linked couple
+    function canLinkPartner(userId) {
+      return isAuthenticated() &&
+        (!('coupleId' in resource.data) || resource.data.coupleId == null) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['coupleId']) &&
+        request.resource.data.coupleId is string &&
+        request.resource.data.coupleId.size() <= 100 &&
+        isMemberOfCouple(request.resource.data.coupleId) &&
+        isCouplePartner(request.resource.data.coupleId, userId);
+    }
+
+    function isValidCouple(data) {
+      return hasOnlyAllowedFields(data, ['partner1', 'partner2', 'createdAt']) &&
+        hasRequiredFields(data, ['partner1', 'partner2']) &&
+        data.partner1 is string && data.partner1.size() > 0 && data.partner1.size() <= 128 &&
+        data.partner2 is string && data.partner2.size() > 0 && data.partner2.size() <= 128 &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidTransaction(data) {
+      return hasOnlyAllowedFields(data, [
+          'uid', 'coupleId', 'description', 'amount', 'category', 'categoryId',
+          'account', 'accountId', 'type', 'scope', 'date', 'createdAt'
+        ]) &&
+        hasRequiredFields(data, ['uid', 'description', 'amount', 'category', 'type', 'scope', 'date']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        (!('coupleId' in data) || data.coupleId == null || (data.coupleId is string && data.coupleId.size() <= 100)) &&
+        data.description is string && data.description.size() >= 1 && data.description.size() <= 200 &&
+        data.amount is number && data.amount >= 0 && data.amount <= 1000000000 &&
+        data.category is string && data.category.size() >= 1 && data.category.size() <= 50 &&
+        (!('categoryId' in data) || (data.categoryId is string && data.categoryId.size() <= 100)) &&
+        (!('account' in data) || (data.account is string && data.account.size() <= 50)) &&
+        (!('accountId' in data) || (data.accountId is string && data.accountId.size() <= 100)) &&
+        data.type in ['expense', 'income'] &&
+        data.scope in ['personal', 'shared'] &&
+        isValidDateString(data.date) &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidAccount(data) {
+      return hasOnlyAllowedFields(data, [
+          'uid', 'coupleId', 'name', 'type', 'initialBalance', 'color', 'scope', 'createdAt'
+        ]) &&
+        hasRequiredFields(data, ['uid', 'name', 'type', 'initialBalance', 'scope']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        (!('coupleId' in data) || data.coupleId == null || (data.coupleId is string && data.coupleId.size() <= 100)) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 50 &&
+        data.type in ['bank', 'wallet', 'cash', 'credit', 'savings', 'investment', 'other'] &&
+        data.initialBalance is number && data.initialBalance >= -1000000000 && data.initialBalance <= 1000000000 &&
+        (!('color' in data) || (data.color is string && data.color.size() <= 30)) &&
+        data.scope in ['personal', 'shared'] &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidCategory(data) {
+      return hasOnlyAllowedFields(data, ['uid', 'coupleId', 'name', 'type', 'color', 'scope', 'createdAt']) &&
+        hasRequiredFields(data, ['uid', 'name', 'type', 'scope']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        (!('coupleId' in data) || data.coupleId == null || (data.coupleId is string && data.coupleId.size() <= 100)) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 50 &&
+        data.type in ['expense', 'income'] &&
+        (!('color' in data) || (data.color is string && data.color.size() <= 30)) &&
+        data.scope in ['personal', 'shared'] &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidHabit(data) {
+      return hasOnlyAllowedFields(data, ['uid', 'coupleId', 'name', 'streak', 'completedDates', 'scope', 'createdAt']) &&
+        hasRequiredFields(data, ['uid', 'name', 'streak', 'completedDates', 'scope']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        (!('coupleId' in data) || data.coupleId == null || (data.coupleId is string && data.coupleId.size() <= 100)) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 100 &&
+        data.streak is number && data.streak >= 0 && data.streak <= 100000 &&
+        data.completedDates is list && data.completedDates.size() <= 1000 &&
+        data.scope in ['personal', 'shared'] &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    function isValidTask(data) {
+      return hasOnlyAllowedFields(data, ['uid', 'coupleId', 'title', 'completed', 'assignedTo', 'scope', 'createdAt']) &&
+        hasRequiredFields(data, ['uid', 'title', 'completed', 'scope']) &&
+        data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128 &&
+        (!('coupleId' in data) || data.coupleId == null || (data.coupleId is string && data.coupleId.size() <= 100)) &&
+        data.title is string && data.title.size() >= 1 && data.title.size() <= 200 &&
+        data.completed is bool &&
+        (!('assignedTo' in data) || (data.assignedTo is string && data.assignedTo.size() <= 128)) &&
+        data.scope in ['personal', 'shared'] &&
+        (!('createdAt' in data) || data.createdAt is timestamp);
+    }
+
+    // ===============================================================
+    // Root Rule: Default Deny All
+    // ===============================================================
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // ===============================================================
+    // Collection: users
+    // ===============================================================
+    match /users/{userId} {
+      // Get: user can read their own profile, or linked partner can read
+      allow get: if isOwner(userId) || (
+        ('coupleId' in resource.data) &&
+        resource.data.coupleId != null &&
+        isMemberOfCouple(resource.data.coupleId)
+      );
+
+      // List: authenticated users can query to find partners by coupleCode
+      allow list: if isAuthenticated();
+
+      // Create: user can only create their own document
+      allow create: if isOwner(userId) &&
+        request.resource.data.uid == request.auth.uid &&
+        isValidUser(request.resource.data);
+
+      // Update: user can update own profile, or partner can set coupleId during linking
+      allow update: if canUpdateSelf(userId) || canLinkPartner(userId);
+
+      // Delete: only owner can delete their own profile
+      allow delete: if isOwner(userId);
+    }
+
+    // ===============================================================
+    // Collection: couples
+    // ===============================================================
+    match /couples/{coupleId} {
+      // Read: only partners belonging to this couple
+      allow read: if isAuthenticated() && (
+        resource.data.partner1 == request.auth.uid ||
+        resource.data.partner2 == request.auth.uid
+      );
+
+      // Create: must be authenticated, one of the partners, distinct partners
+      allow create: if isAuthenticated() &&
+        isValidCouple(request.resource.data) &&
+        request.resource.data.partner1 != request.resource.data.partner2 &&
+        (
+          request.auth.uid == request.resource.data.partner1 ||
+          request.auth.uid == request.resource.data.partner2
+        );
+
+      // Update: partners only, partner IDs and createdAt are immutable
+      allow update: if isAuthenticated() && (
+        resource.data.partner1 == request.auth.uid ||
+        resource.data.partner2 == request.auth.uid
+      ) &&
+        isValidCouple(request.resource.data) &&
+        areImmutableFieldsUnchanged(['partner1', 'partner2', 'createdAt']);
+
+      // Delete: partners only
+      allow delete: if isAuthenticated() && (
+        resource.data.partner1 == request.auth.uid ||
+        resource.data.partner2 == request.auth.uid
+      );
+    }
+
+    // ===============================================================
+    // Collection: transactions
+    // ===============================================================
+    match /transactions/{transactionId} {
+      allow read: if canAccessSharedResource();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidTransaction(request.resource.data);
+
+      allow update: if canAccessSharedResource() &&
+        request.resource.data.uid == resource.data.uid &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidTransaction(request.resource.data) &&
+        (
+          !('coupleId' in resource.data) ||
+          resource.data.coupleId == null ||
+          request.resource.data.coupleId == resource.data.coupleId
+        );
+
+      allow delete: if canAccessSharedResource();
+    }
+
+    // ===============================================================
+    // Collection: accounts
+    // ===============================================================
+    match /accounts/{accountId} {
+      allow read: if canAccessSharedResource();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidAccount(request.resource.data);
+
+      allow update: if canAccessSharedResource() &&
+        request.resource.data.uid == resource.data.uid &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidAccount(request.resource.data) &&
+        (
+          !('coupleId' in resource.data) ||
+          resource.data.coupleId == null ||
+          request.resource.data.coupleId == resource.data.coupleId
+        );
+
+      allow delete: if canAccessSharedResource();
+    }
+
+    // ===============================================================
+    // Collection: categories
+    // ===============================================================
+    match /categories/{categoryId} {
+      allow read: if canAccessSharedResource();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidCategory(request.resource.data);
+
+      allow update: if canAccessSharedResource() &&
+        request.resource.data.uid == resource.data.uid &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidCategory(request.resource.data) &&
+        (
+          !('coupleId' in resource.data) ||
+          resource.data.coupleId == null ||
+          request.resource.data.coupleId == resource.data.coupleId
+        );
+
+      allow delete: if canAccessSharedResource();
+    }
+
+    // ===============================================================
+    // Collection: habits
+    // ===============================================================
+    match /habits/{habitId} {
+      allow read: if canAccessSharedResource();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidHabit(request.resource.data);
+
+      allow update: if canAccessSharedResource() &&
+        request.resource.data.uid == resource.data.uid &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidHabit(request.resource.data) &&
+        (
+          !('coupleId' in resource.data) ||
+          resource.data.coupleId == null ||
+          request.resource.data.coupleId == resource.data.coupleId
+        );
+
+      allow delete: if canAccessSharedResource();
+    }
+
+    // ===============================================================
+    // Collection: tasks
+    // ===============================================================
+    match /tasks/{taskId} {
+      allow read: if canAccessSharedResource();
+
+      allow create: if isAuthenticated() &&
+        request.resource.data.uid == request.auth.uid &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidTask(request.resource.data);
+
+      allow update: if canAccessSharedResource() &&
+        request.resource.data.uid == resource.data.uid &&
+        areImmutableFieldsUnchanged(['uid', 'createdAt']) &&
+        isValidScopeAndCouple(request.resource.data) &&
+        isValidTask(request.resource.data) &&
+        (
+          !('coupleId' in resource.data) ||
+          resource.data.coupleId == null ||
+          request.resource.data.coupleId == resource.data.coupleId
+        );
+
+      allow delete: if canAccessSharedResource();
+    }
+  }
+}
